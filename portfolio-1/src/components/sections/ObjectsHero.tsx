@@ -9,16 +9,14 @@ import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
  * Headline: big white 3D letters (74% of the screen width) with a deep cobalt extrusion.
  * The header (harbor, page links, Let's talk) is the fixed site header in HomeDock, drawn over this hero.
  *
- * INTRO (after Jitter's "Morph: Shape To Text", in the order of Harbor's reference clip), played on this same
- * 3D headline so the last frame of the intro is exactly the hero (same letters, font, size, place):
- *  1. Flat: the headline with almost no depth, pale and glowing, on a navy/purple field with light rings.
- *     A big "harbor" wordmark sits just above it.
- *  2. The field drops to black; the extrusion grows long (pink at the letters, periwinkle at the back) and the
- *     type tips back a little so the extrusion runs down toward a vanishing point. At the same time the "harbor"
- *     wordmark shrinks and flies up to the header's top-left corner, landing exactly on the header's own wordmark
- *     (which then takes over).
- *  3. Hand-off: depth, tilt and colours ease back to the hero's own values while the cobalt background fades in,
- *     the rest of the header fades in, then the objects pop in and the mouse swing fades back.
+ * INTRO (after Jitter's "Morph: Shape To Text", Harbor's reference clip), played on this same 3D headline so
+ * the last frame of the intro is exactly the hero (same letters, font, size, place). About 2.4s:
+ *  1. Light in, once: the navy/purple field and the flat pale headline fade up; a big "harbor" wordmark sits above.
+ *  2. Snap: a single ring of light closes in on the headline, accelerating, and "clicks" at the centre.
+ *  3. On the snap the field drops to black and the extrusion punches out long (pink at the letters, periwinkle at
+ *     the back), the type tips back so it runs down toward a vanishing point; the wordmark flies to the header.
+ *  4. Hand-off: depth, tilt and colours ease back to the hero's own values while the cobalt background fades in,
+ *     the rest of the header fades in, the objects pop in and the mouse swing fades back.
  *     Click / key / wheel skips to the hand-off. prefers-reduced-motion: no intro.
  *
  * Objects: photoreal cut-outs of a UX designer's kit, generated on a green screen and keyed out in the browser,
@@ -64,12 +62,13 @@ const EXT_NEAR = '#FF5FBF'; // pink at the letters
 const EXT_FAR = '#6F7CFF'; // periwinkle at the back
 const INTRO_DEEP = 9; // extrusion length at its longest, in multiples of the hero depth
 const INTRO_TILT = 0.3; // radians the type tips back while extruded
-const I_FLAT = 1.35;
-const I_BLACK = 0.4;
-const I_GROW = 0.8;
-const I_HOLD = 0.35;
-const I_HAND = 1.0;
-const I_START_GROW = I_FLAT + 0.2;
+const I_LIGHT = 0.35; // light comes in, once
+const I_RING_START = 0.25; // the single ring starts closing in
+const I_START_GROW = 0.75; // snap: the ring reaches the centre and the extrusion punches out
+const I_BLACK = 0.25;
+const I_GROW = 0.6;
+const I_HOLD = 0.25;
+const I_HAND = 0.8;
 const I_START_HAND = I_START_GROW + I_GROW + I_HOLD;
 const I_END = I_START_HAND + I_HAND;
 // the "harbor" wordmark above the headline: size at the start (x the header's 26px) and gap to the headline
@@ -212,8 +211,7 @@ export function ObjectsHero() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const introBlackRef = useRef<HTMLDivElement>(null);
   const introBgRef = useRef<HTMLDivElement>(null);
-  const ring1Ref = useRef<HTMLDivElement>(null);
-  const ring2Ref = useRef<HTMLDivElement>(null);
+  const ringRef = useRef<HTMLDivElement>(null);
   const flyRef = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState(false);
 
@@ -225,10 +223,9 @@ export function ObjectsHero() {
     const video = videoRef.current;
     const iBlack = introBlackRef.current;
     const iBg = introBgRef.current;
-    const r1 = ring1Ref.current;
-    const r2 = ring2Ref.current;
+    const ringEl = ringRef.current;
     const fly = flyRef.current;
-    if (!canvas || !host || !outer || !bg || !video || !iBlack || !iBg || !r1 || !r2 || !fly) return;
+    if (!canvas || !host || !outer || !bg || !video || !iBlack || !iBg || !ringEl || !fly) return;
 
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
     const html = document.documentElement;
@@ -253,8 +250,7 @@ export function ObjectsHero() {
     const hideIntroLayers = () => {
       iBlack.style.display = 'none';
       iBg.style.display = 'none';
-      r1.style.display = 'none';
-      r2.style.display = 'none';
+      ringEl.style.display = 'none';
       fly.style.display = 'none';
     };
     const landLogo = () => {
@@ -279,6 +275,9 @@ export function ObjectsHero() {
       iv.depth = 0.02;
       iv.flat = 1;
       iv.obj = 0;
+      // start in the dark: the light comes in once when the headline is ready
+      iBg.style.opacity = '0';
+      canvas.style.opacity = '0';
       // the header stays in place; its wordmark waits for the flying one, the rest is hidden until the hand-off
       const { h, logo, rest } = headerParts();
       if (h) h.style.pointerEvents = 'none';
@@ -292,6 +291,7 @@ export function ObjectsHero() {
     } catch {
       setFailed(true);
       hideIntroLayers();
+      canvas.style.opacity = '';
       html.style.overflow = prevOverflow;
       showHeader();
       return;
@@ -452,11 +452,11 @@ export function ObjectsHero() {
     }
 
     /**
-     * The "harbor" wordmark: sits big just above the flat headline, then (while the headline grows into 3D)
+     * The "harbor" wordmark: sits big just above the flat headline, then (while the headline punches into 3D)
      * shrinks and flies to the header wordmark's exact spot. Placed at the header wordmark's rect and moved
      * with a transform, so p = 1 is pixel-identical to the header's own wordmark.
      */
-    function logoStep(t: number) {
+    function logoStep(t: number, light: number) {
       if (logoLanded) return;
       const { logo } = headerParts();
       if (!logo) return landLogo();
@@ -466,56 +466,48 @@ export function ObjectsHero() {
       const S = viewW < 768 ? LOGO_SCALE_MOBILE : LOGO_SCALE;
       const p = inOut(clamp01((t - I_START_GROW) / (I_GROW + I_HOLD)));
       if (!logoFrom || p === 0) logoFrom = { x: viewW / 2, y: headlineTop() - LOGO_GAP - (S * h) / 2 };
-      const appear = outCubic(clamp01((t - 0.15) / 0.6));
       const sc = lerp(S, 1, p);
       // centre travels from above the headline to the header wordmark, with a slight upward arc
       const cx = lerp(logoFrom.x, lr.left + w / 2, p);
-      const cy = lerp(logoFrom.y, lr.top + h / 2, p) - 40 * Math.sin(Math.PI * p) + (1 - appear) * 14;
+      const cy = lerp(logoFrom.y, lr.top + h / 2, p) - 40 * Math.sin(Math.PI * p);
       fly.style.left = `${lr.left}px`;
       fly.style.top = `${lr.top}px`;
       fly.style.transform = `translate3d(${(cx - (sc * w) / 2 - lr.left).toFixed(1)}px, ${(cy - (sc * h) / 2 - lr.top).toFixed(1)}px, 0) scale(${sc.toFixed(4)})`;
-      fly.style.opacity = String(appear);
-      const g = 1 - p;
-      fly.style.textShadow = `0 0 ${(18 * g).toFixed(1)}px rgba(190,170,255,${(0.75 * g).toFixed(2)})${p > 0.45 ? `, ${LOGO_EXTRUDE}` : ''}`;
+      fly.style.opacity = String(light);
+      fly.style.textShadow = p > 0.45 ? LOGO_EXTRUDE : 'none';
       if (p >= 1) landLogo();
     }
 
     /** intro timeline -> iv (depth, tilt, face colour, objects), side colours and the background layers */
-    const ring = (el: HTMLElement, p: number, fade: number) => {
-      el.style.transform = `translate(-50%, -50%) scale(${(0.3 + 2.2 * outCubic(p)).toFixed(3)})`;
-      el.style.opacity = String(p <= 0 || p >= 1 ? 0 : Math.sin(Math.PI * p) * 0.9 * fade);
-    };
     function introStep(now: number) {
-      if (!introOn) return;
-      if (!introStart) {
-        // waiting for the font: field only
-        ring(r1, 0, 1);
-        ring(r2, 0, 1);
-        return;
-      }
+      if (!introOn || !introStart) return;
       const t = (now - introStart) / 1000;
-      const black = clamp01((t - I_FLAT) / I_BLACK);
+      // 1. light comes in, once
+      const light = outCubic(clamp01(t / I_LIGHT));
+      // 2. one ring closes in on the headline, accelerating, and clicks at the centre
+      const rp = clamp01((t - I_RING_START) / (I_START_GROW - I_RING_START));
+      ringEl.style.transform = `translate(-50%, -50%) scale(${lerp(2.6, 0.18, rp * rp * rp).toFixed(3)})`;
+      ringEl.style.opacity = rp <= 0 || rp >= 1 ? '0' : String((0.95 * Math.min(1, rp * 4)).toFixed(3));
+      // 3. on the snap: black field, the extrusion punches out
+      const black = outCubic(clamp01((t - I_START_GROW) / I_BLACK));
       const growLin = clamp01((t - I_START_GROW) / I_GROW);
       const grow = outCubic(growLin);
+      // 4. hand-off to the hero
       const hand = inOut(clamp01((t - I_START_HAND) / I_HAND));
 
-      iBg.style.opacity = String(1 - outCubic(black));
+      canvas!.style.opacity = String(light);
+      iBg.style.opacity = String(light * (1 - black));
       iBlack.style.opacity = String(1 - hand);
-      ring(r1, clamp01(t / 1.1), 1 - black);
-      ring(r2, clamp01((t - 0.55) / 1.1), 1 - black);
 
       iv.depth = lerp(lerp(0.02, INTRO_DEEP, grow), 1, hand);
       iv.tilt = INTRO_TILT * grow * (1 - hand);
       iv.scale = 1 + 0.06 * backOut(growLin) * (1 - hand);
       iv.flat = 1 - hand;
-      iv.obj = backOut(clamp01((t - I_START_HAND - 0.35) / 0.9));
+      iv.obj = backOut(clamp01((t - I_START_HAND - 0.2) / 0.8));
       sideU.uNear.value.copy(cNear).lerp(cSide, hand);
       sideU.uFar.value.copy(cFar).lerp(cSide, hand);
 
-      const glow = 1 - black;
-      canvas!.style.filter = glow > 0.01 ? `drop-shadow(0 0 ${(26 * glow).toFixed(1)}px rgba(190,170,255,${(0.7 * glow).toFixed(2)}))` : '';
-
-      logoStep(t);
+      logoStep(t, light);
       if (t >= I_START_HAND) showHeader();
       if (t >= I_END) endIntro();
     }
@@ -529,7 +521,7 @@ export function ObjectsHero() {
       iv.obj = 1;
       sideU.uNear.value.copy(cSide);
       sideU.uFar.value.copy(cSide);
-      canvas!.style.filter = '';
+      canvas!.style.opacity = '';
       hideIntroLayers();
       html.style.overflow = prevOverflow;
       showHeader();
@@ -1010,6 +1002,7 @@ export function ObjectsHero() {
       document.removeEventListener('visibilitychange', sync);
       reduce.removeEventListener?.('change', sync);
       html.style.overflow = prevOverflow;
+      canvas.style.opacity = '';
       showHeader();
       textGroup.children.forEach((m) => (m as THREE.Mesh).geometry.dispose());
       planeGeo.dispose();
@@ -1036,23 +1029,20 @@ export function ObjectsHero() {
       >
         <div ref={bgRef} className="pointer-events-none absolute inset-0" style={{ backgroundImage: BG_FILL }} aria-hidden="true" />
 
-        {/* intro field: black under a navy/purple glow with light rings (fades into the hero's cobalt) */}
+        {/* intro field: black under a navy/purple glow, and one ring of light that closes in on the headline */}
         <div ref={introBlackRef} className="pointer-events-none absolute inset-0 bg-black" aria-hidden="true" />
         <div ref={introBgRef} className="pointer-events-none absolute inset-0" style={{ backgroundImage: INTRO_BG }} aria-hidden="true" />
-        {[ring1Ref, ring2Ref].map((r, i) => (
-          <div
-            key={i}
-            ref={r}
-            aria-hidden="true"
-            className="pointer-events-none absolute left-1/2 top-1/2 rounded-full"
-            style={{
-              width: '70vmax',
-              height: '70vmax',
-              opacity: 0,
-              background: 'radial-gradient(circle, transparent 52%, rgba(150,110,255,0.5) 62%, rgba(255,95,191,0.22) 68%, transparent 74%)',
-            }}
-          />
-        ))}
+        <div
+          ref={ringRef}
+          aria-hidden="true"
+          className="pointer-events-none absolute left-1/2 top-1/2 rounded-full"
+          style={{
+            width: '70vmax',
+            height: '70vmax',
+            opacity: 0,
+            background: 'radial-gradient(circle, transparent 52%, rgba(150,110,255,0.55) 62%, rgba(255,95,191,0.25) 68%, transparent 74%)',
+          }}
+        />
 
         <video
           ref={videoRef}

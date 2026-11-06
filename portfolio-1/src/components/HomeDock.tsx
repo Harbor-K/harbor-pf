@@ -2,12 +2,16 @@ import React, { useEffect, useState } from 'react';
 import { EMAIL } from '../data/content';
 import { CV_URL, CV_LABEL } from '../data/links';
 
+/**
+ * Site header (home, Work page): exactly 56px, flush with the top edge, never any background.
+ * Menu: Work (#/work, all case studies) and About me (#/about). The Experience link was removed;
+ * the Experience section stays on the home page.
+ * Over dark/blue areas: white text with the headline's cobalt extrusion; over light ones: soft black.
+ */
 const ITEMS = [
-  { id: 'experience', label: 'Experience' },
-  { id: 'work', label: 'Projects' },
+  { id: 'work', label: 'Work' },
   { id: 'about', label: 'About me' },
 ];
-const TRACKED = ['home', 'experience', 'work'];
 const COBALT = '#2238D0';
 const EXTRUDE = '#1A2BA6';
 const EXTRUDE_DEEP = '#121C78';
@@ -41,11 +45,12 @@ const bgLum = (el: Element | null): number | null => {
   return null;
 };
 
-const navOffset = (el: HTMLElement) => ((Number(el.dataset.navOffsetVh) || 0) * window.innerHeight) / 100;
 const onAboutPage = () => window.location.hash === '#/about';
+const onWorkPage = () => window.location.hash === '#/work';
+const onSubPage = () => onAboutPage() || onWorkPage();
 
 export function HomeDock() {
-  const [active, setActive] = useState(() => onAboutPage() ? 'about' : 'home');
+  const [active, setActive] = useState(() => (onAboutPage() ? 'about' : onWorkPage() ? 'work' : 'home'));
   const [light, setLight] = useState(false);
   const [pressed, setPressed] = useState(false);
   const [hoverCv, setHoverCv] = useState(false);
@@ -54,15 +59,16 @@ export function HomeDock() {
     let raf = 0;
     const check = () => {
       raf = 0;
-      if (onAboutPage()) {
-        setActive('about');
-      } else {
+      if (onAboutPage()) setActive('about');
+      else if (onWorkPage()) setActive('work');
+      else {
+        // on the home page "Work" lights up over the Projects section
         const mid = window.innerHeight * 0.5;
+        const work = document.getElementById('work');
+        const about = document.getElementById('about');
         let cur = 'home';
-        TRACKED.forEach((id) => {
-          const el = document.getElementById(id);
-          if (el && el.getBoundingClientRect().top + navOffset(el) <= mid) cur = id;
-        });
+        if (work && work.getBoundingClientRect().top <= mid) cur = 'work';
+        if (about && about.getBoundingClientRect().top <= mid) cur = 'home';
         setActive(cur);
       }
       const under = document.elementsFromPoint(window.innerWidth / 2, HEADER_H / 2).find((el) => !el.closest('[data-home-header]'));
@@ -88,35 +94,18 @@ export function HomeDock() {
 
   const go = (id: string) => (e: React.MouseEvent) => {
     e.preventDefault();
-    if (id === 'about') {
-      if (onAboutPage()) {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      } else {
-        window.location.hash = '#/about';
-      }
+    if (id === 'about' || id === 'work') {
+      const hash = `#/${id}`;
+      if (window.location.hash === hash) window.scrollTo({ top: 0, behavior: 'smooth' });
+      else window.location.hash = hash;
       return;
     }
-    if (id === 'home') {
-      if (onAboutPage()) {
-        window.location.hash = '';
-        requestAnimationFrame(() => window.scrollTo(0, 0));
-      } else {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      }
-      return;
-    }
-    const el = document.getElementById(id);
-    if (el) {
-      window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY + navOffset(el), behavior: 'smooth' });
-    } else if (onAboutPage()) {
-      window.location.hash = `#${id}`;
-      let tries = 0;
-      const tick = () => {
-        const target = document.getElementById(id);
-        if (target) target.scrollIntoView({ block: 'start' });
-        else if (tries++ < 40) requestAnimationFrame(tick);
-      };
-      requestAnimationFrame(tick);
+    // home
+    if (onSubPage()) {
+      window.location.hash = '';
+      requestAnimationFrame(() => window.scrollTo(0, 0));
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
@@ -148,7 +137,7 @@ export function HomeDock() {
             return (
               <a
                 key={it.id}
-                href={it.id === 'about' ? '#/about' : `#${it.id}`}
+                href={`#/${it.id}`}
                 onClick={go(it.id)}
                 aria-current={on ? 'true' : undefined}
                 className="whitespace-nowrap text-[16px] font-bold leading-none transition-all duration-200 hover:opacity-100"

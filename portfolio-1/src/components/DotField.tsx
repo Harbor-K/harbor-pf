@@ -2,10 +2,11 @@ import React, { useEffect, useRef } from 'react';
 import { hashString, mulberry32 } from '../utils/random';
 
 /**
- * Dot harbour for the footer.
- * The ground is a still, colourful landscape of round dots (navy -> cobalt -> yellow -> red -> lime,
+ * Dot harbour for the footer (on the blue-dark tone).
+ * The ground is a still, colourful landscape of round dots (cobalt -> bright blue -> periwinkle -> yellow -> red -> lime,
  * with a few lighter tints and loose dots above) along the bottom `height` px. It doesn't move.
- * In the middle, a lighthouse made of the same dots stands on a low pier. Only its light moves:
+ * In the middle, a lighthouse made of the same dots (red / pale-lavender stripes, readable on navy) stands on a low pier.
+ * Only its light moves:
  * - Beam: the lamp throws a wide beam of yellow dots (on the same dot grid) that turns a full 360°
  *   to follow the cursor across the whole footer, behind the text.
  * - Facing you: when the cursor comes near the lighthouse, the light turns towards the viewer —
@@ -19,10 +20,10 @@ import { hashString, mulberry32 } from '../utils/random';
 const SPACING = 13;
 const DOT_R = 4.6;
 const BOTTOM_PAD = 10;
-const LAYERS = ['#1C2541', '#1C2541', '#3B5BD9', '#3B5BD9', '#F5C518', '#F5C518', '#E0492A', '#D8FF00'];
+const LAYERS = ['#2238D0', '#2238D0', '#3653F0', '#6B7BFF', '#F5C518', '#F5C518', '#E0492A', '#D8FF00'];
 
 // lighthouse (in dot rows from the bottom)
-const NAVY = '#1C2541';
+const NAVY = '#C3C9F2'; // the light stripe (pale lavender on the navy footer)
 const RED = '#E0492A';
 const LAMP = '#FFE600';
 const ZONE = 8; // columns either side of the centre kept as a low pier around the lighthouse
@@ -40,7 +41,7 @@ function lighthouseDot(dc: number, r: number, rows: number): string | null {
   const top = Math.min(rows - 1, 18);
   const lampRow = top - 4; // lamp room: two rows
   if (r >= 3 && r < lampRow - 1) {
-    // tower: wider at the base, red / navy stripes every two rows
+    // tower: wider at the base, red / light stripes every two rows
     const hw = r < 7 ? 2 : 1;
     if (a > hw) return null;
     return Math.floor((r - 3) / 2) % 2 === 0 ? RED : NAVY;
@@ -226,8 +227,7 @@ export function DotField({ height = 260, className = '', style }: { height?: num
             if (off < half) kb = smooth(1 - off / half) * Math.pow(1 - d / maxLen, 0.6) * beamK;
           }
 
-          // round glow facing the viewer: warm white in the middle, rings of yellow spreading out,
-          // full strength across most of the disc and feathering off over the outer fifth
+          // round glow facing the viewer
           let kg = 0;
           let gt = 1;
           if (facing > 0.01 && d < glowR) {

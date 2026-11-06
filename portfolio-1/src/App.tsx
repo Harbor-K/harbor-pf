@@ -12,8 +12,9 @@ import { CaseReveal } from './components/case/CaseReveal';
 import { ImageLightbox } from './components/case/ImageLightbox';
 import { CursorTrail } from './components/CursorTrail';
 import { AboutPage } from './components/about/AboutPage';
+import { WorkPage } from './components/work/WorkPage';
 
-const CASE_ROUTES = ['#/trust-bank', '#/gamecove', '#/utrada', '#/about'];
+const CASE_ROUTES = ['#/trust-bank', '#/gamecove', '#/utrada', '#/about', '#/work'];
 
 function readRoute() {
   if (typeof window === 'undefined') return '';
@@ -22,8 +23,9 @@ function readRoute() {
 
 // Not rendered on the home page: FixedNav (replaced by the hero's own header + HomeDock, like agentcard.com),
 // DotIntro, IntroHero, Manifesto, ToolsDomains, RolesHero and MorphIntro.
-// The intro (flat type -> 3D -> hero) is now played by ObjectsHero itself, on its own 3D headline,
+// The intro (flat type -> 3D -> hero) is played by ObjectsHero itself, on its own 3D headline,
 // so the last frame of the intro IS the hero headline.
+// Header menu: Work (#/work, all case studies) and About me (#/about).
 export function App() {
   const [route, setRoute] = useState(readRoute);
 
@@ -54,6 +56,11 @@ export function App() {
 
       {route === '#/about' ? (
         <AboutPage onClose={closeAbout} />
+      ) : route === '#/work' ? (
+        <>
+          <WorkPage />
+          <HomeDock />
+        </>
       ) : route ? (
         <div className="case-grid" key={route}>
           <ImageLightbox>
@@ -68,7 +75,7 @@ export function App() {
         </div>
       ) : (
         // home-min16: page content never goes below 16px (see index.css)
-        <div className="home-min16 relative w-full min-h-screen bg-white text-[#0A0A0A] font-inter-tight overflow-x-clip">
+        <div className="home-min16 relative w-full min-h-screen bg-[#050826] text-[#0A0A0A] font-inter-tight overflow-x-clip">
           <div className="fixed inset-0 dot-grid-bg pointer-events-none z-0" />
 
           <main className="relative z-10">
