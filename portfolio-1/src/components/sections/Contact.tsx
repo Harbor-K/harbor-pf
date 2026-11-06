@@ -1,25 +1,21 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { EMAIL, INSTAGRAM_URL, BOOK_CALL_URL } from '../../data/content';
 import { CV_URL, WHATSAPP_URL } from '../../data/links';
 import { KimLLM } from '../KimLLM';
-import { OBJECT_URLS, keyCutout } from './deskScene';
+import { DESK_TOP } from './deskScene';
 
 /**
  * Site footer, laid out after Harbor's Relume footer reference:
  *  - centred top: small cobalt eyebrow, a big two-line headline, one supporting line;
- *  - in the middle, in a soft grey frame: Kim LLM (the "ask me anything" chat) instead of the reference's image;
- *  - beside it (like her Givingli reference): the desk objects from the hero come down again, SMALL, and are set
- *    down on both sides one after another as the footer scrolls into view — kept off the middle so they never
- *    cover the chat. Standing: laptop, mug. Lying flat: sticky notes, headphones, clipboard, phone.
+ *  - in the middle: Kim LLM (the "ask me anything" chat), wide (up to 1200px), with no frame around it;
  *  - four link columns, then a bottom bar: wordmark, copyright, "South Korea" with the live local time, icons.
- * Copy is PLACEHOLDER until Harbor signs it off.
- * On the About page (which already opens with Kim LLM) the chat is replaced by a Book a call button.
- * `dark` is accepted for older callers and ignored.
+ * Background: the same colour as the hero's desk top (DESK_TOP), so the desk scene flows into it.
+ * Copy is PLACEHOLDER until Harbor signs it off. `dark` is accepted for older callers and ignored.
  */
 
 const COBALT = '#2238D0';
 const INK = '#1C1C1E';
-const BG = '#F2F1EF';
+const BG = DESK_TOP;
 const LINKEDIN_URL = '[URL]'; // TODO: Harbor's LinkedIn profile URL
 const FONT = '"Helvetica Neue", Helvetica, Arial, sans-serif';
 
@@ -64,19 +60,6 @@ const SOCIALS: { label: string; href: string; d: string; stroke?: boolean }[] = 
   { label: 'Book a call', href: BOOK_CALL_URL, d: 'M4 6h16v14H4zM4 10h16M8 3.5v4M16 3.5v4', stroke: true },
 ];
 
-/**
- * The objects beside the chat (desktop only). w = picture width in px (small on purpose), tilt in degrees,
- * flat = vertical squash for objects lying down (omit for standing ones).
- */
-const DECOR: { kind: string; w: number; tilt: number; flat?: number; style: React.CSSProperties }[] = [
-  { kind: 'laptop', w: 200, tilt: -4, style: { left: '6%', top: '12%' } },
-  { kind: 'mug', w: 104, tilt: 0, style: { left: '15%', top: '50%' } },
-  { kind: 'stickyYellow', w: 118, tilt: -8, flat: 0.88, style: { left: '4%', top: '72%' } },
-  { kind: 'headphones', w: 150, tilt: 80, flat: 0.8, style: { right: '8%', top: '10%' } },
-  { kind: 'clipboard', w: 120, tilt: -74, flat: 0.62, style: { right: '12%', top: '44%' } },
-  { kind: 'phone', w: 92, tilt: -70, flat: 0.68, style: { right: '5%', top: '72%' } },
-];
-
 function useSeoulTime() {
   const fmt = () =>
     new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Seoul', hour: 'numeric', minute: '2-digit' }).format(new Date());
@@ -89,90 +72,14 @@ function useSeoulTime() {
 }
 
 export function Contact(_props: { dark?: boolean }) {
-  const topRef = useRef<HTMLDivElement>(null);
-  const pieceRefs = useRef<(HTMLDivElement | null)[]>([]);
-  const [cutouts, setCutouts] = useState<Record<string, string>>({});
   const time = useSeoulTime();
-  const onAbout = typeof window !== 'undefined' && window.location.hash === '#/about';
-
-  // key the green-screen photos once (same objects as the hero desk)
-  useEffect(() => {
-    let alive = true;
-    DECOR.forEach((d) => {
-      keyCutout(OBJECT_URLS[d.kind]).then((url) => {
-        if (alive && url) setCutouts((c) => ({ ...c, [d.kind]: url }));
-      });
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  // the objects come down and are set beside the chat, one after another, as the footer comes into view
-  useEffect(() => {
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let raf = 0;
-    const run = () => {
-      raf = 0;
-      const el = topRef.current;
-      if (!el) return;
-      const vh = window.innerHeight;
-      const p = reduce ? 1 : Math.min(1, Math.max(0, (vh - el.getBoundingClientRect().top) / (vh * 0.9)));
-      pieceRefs.current.forEach((node, i) => {
-        if (!node) return;
-        const t = Math.min(1, Math.max(0, (p - 0.09 * i) / 0.45));
-        // lowered straight down, slowing to a soft touch, then a tiny settle
-        const down = t < 0.85 ? 1 - (1 - t / 0.85) ** 2.2 : 1 - 0.02 * Math.sin((Math.PI * (t - 0.85)) / 0.15);
-        const rock = t < 0.85 ? 6 * (1 - t) : 2.5 * Math.exp(-5 * (t - 0.85) / 0.15) * Math.cos((2.5 * Math.PI * (t - 0.85)) / 0.15);
-        node.style.opacity = String(Math.min(1, t * 3));
-        node.style.transform = `translate3d(0, ${(-(1 - down) * 200).toFixed(1)}px, 0) rotate(${(i % 2 ? rock : -rock).toFixed(2)}deg)`;
-      });
-    };
-    const on = () => {
-      if (!raf) raf = requestAnimationFrame(run);
-    };
-    run();
-    window.addEventListener('scroll', on, { passive: true });
-    window.addEventListener('resize', on);
-    return () => {
-      window.removeEventListener('scroll', on);
-      window.removeEventListener('resize', on);
-      if (raf) cancelAnimationFrame(raf);
-    };
-  }, []);
-
   const eyebrow = 'text-[16px] font-bold uppercase tracking-[0.08em]';
 
   return (
     <footer id="contact" className="relative overflow-hidden" style={{ background: BG, color: INK, fontFamily: FONT }}>
-      {/* top: headline + Kim LLM, with the desk objects set down on both sides */}
-      <div ref={topRef} className="relative px-[16px] pt-[120px] pb-[72px] md:px-6">
-        <div className="pointer-events-none absolute inset-0 hidden lg:block" aria-hidden="true">
-          {DECOR.map((d, i) => (
-            <div
-              key={d.kind}
-              ref={(el) => {
-                pieceRefs.current[i] = el;
-              }}
-              className="absolute will-change-transform"
-              style={{ ...d.style, opacity: 0 }}
-            >
-              {/* the shadow is drawn on this middle layer so it always falls straight down onto the surface */}
-              <div style={{ filter: d.flat ? 'drop-shadow(0 4px 5px rgba(20,22,40,0.22))' : 'drop-shadow(0 12px 10px rgba(20,22,40,0.18)) drop-shadow(0 3px 3px rgba(20,22,40,0.2))' }}>
-                {cutouts[d.kind] && (
-                  <img
-                    src={cutouts[d.kind]}
-                    alt=""
-                    draggable={false}
-                    style={{ width: d.w, height: 'auto', display: 'block', transform: `scaleY(${d.flat ?? 1}) rotate(${d.tilt}deg)` }}
-                  />
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="relative z-[1] mx-auto max-w-[760px] text-center">
+      {/* top: headline + Kim LLM */}
+      <div className="relative px-[16px] pt-[120px] pb-[72px] md:px-6">
+        <div className="relative mx-auto max-w-[760px] text-center">
           <p className={eyebrow} style={{ color: COBALT }}>
             Let&apos;s talk
           </p>
@@ -186,22 +93,10 @@ export function Contact(_props: { dark?: boolean }) {
           </p>
         </div>
 
-        {onAbout ? (
-          <div className="relative z-[1] mt-[32px] flex justify-center">
-            <a
-              href={BOOK_CALL_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex h-[48px] items-center rounded-[8px] bg-[#1C1C1E] px-[22px] text-[16px] font-bold text-white transition-opacity hover:opacity-90"
-            >
-              Book a call
-            </a>
-          </div>
-        ) : (
-          <div className="relative z-[1] mx-auto mt-[32px] max-w-[720px] rounded-[24px] bg-[#E5E4E0] p-[12px] text-left">
-            <KimLLM />
-          </div>
-        )}
+        {/* the chat itself, wide and without a frame */}
+        <div className="relative mx-auto mt-[40px] w-full max-w-[1200px] text-left">
+          <KimLLM />
+        </div>
       </div>
 
       {/* link columns */}

@@ -33,9 +33,9 @@ import {
  *  2. The background flattens into the plain blue wall and the desk slides up into place.
  *  3. Six objects are set down on the desk one at a time, like a hand placing them: carried to just above
  *     their place, lowered straight down to a soft touch, a hair of squash, a small rock back to level, rest.
- *     The laptop and mug stand; the phone, clipboard, sticky notes and headphones are laid down flat (turned
- *     and squashed into a top-down look) with a tight footprint shadow. The rest of the objects drift away.
+ *     Photos shot facing the other way are mirrored so they follow the desk's perspective. The rest drift away.
  *  4. The copy fades in (PLACEHOLDER copy for now). Then the page moves on.
+ *  Hover a landed object: it lifts a little and a short line about it shows next to the cursor (tooltip).
  *
  *  - Mouse move: the camera swings around the headline. Drag: rotates the whole world.
  */
@@ -212,6 +212,8 @@ export function ObjectsHero() {
   const wallRef = useRef<HTMLDivElement>(null);
   const deskRef = useRef<HTMLDivElement>(null);
   const shadowsRef = useRef<HTMLDivElement>(null);
+  const hotRef = useRef<HTMLDivElement>(null);
+  const tipRef = useRef<HTMLDivElement>(null);
   const copyRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const introBlackRef = useRef<HTMLDivElement>(null);
@@ -228,12 +230,14 @@ export function ObjectsHero() {
     const wall = wallRef.current;
     const deskEl = deskRef.current;
     const shadowsEl = shadowsRef.current;
+    const hotEl = hotRef.current;
+    const tip = tipRef.current;
     const copy = copyRef.current;
     const iBlack = introBlackRef.current;
     const iBg = introBgRef.current;
     const ringEl = ringRef.current;
     const fly = flyRef.current;
-    if (!canvas || !host || !outer || !bg || !wall || !deskEl || !shadowsEl || !copy || !iBlack || !iBg || !ringEl || !fly) return;
+    if (!canvas || !host || !outer || !bg || !wall || !deskEl || !shadowsEl || !hotEl || !tip || !copy || !iBlack || !iBg || !ringEl || !fly) return;
 
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
     const html = document.documentElement;
@@ -415,10 +419,10 @@ export function ObjectsHero() {
     let K = 2026;
     const Q = () => ((K = (16807 * K) % 0x7fffffff) - 1) / 0x7ffffffe;
 
-    type Slot = DeskSlot & { dist: number; P: THREE.Vector3; Pup: THREE.Vector3; shadow: HTMLDivElement };
+    type Slot = DeskSlot & { dist: number; P: THREE.Vector3; Pup: THREE.Vector3; shadow: HTMLDivElement; hot: HTMLDivElement };
     type Piece = {
       mesh: THREE.Group;
-      flatG: THREE.Group; // squashes vertically to lay the picture down flat
+      flatG: THREE.Group; // squashes vertically to lay the picture down flat (only for slots with `flat`)
       plane: THREE.Mesh | null;
       kind: Kind;
       layer: 'grid' | 'shell';
@@ -439,6 +443,8 @@ export function ObjectsHero() {
       f: number; // extra scale from the story (landing / leaving)
       land: number; // 0..1 how far it has been carried to its place (no bobbing at 1)
       rock: number; // extra tilt while being set down
+      hover: boolean; // pointer is over this landed object
+      hv: number; // eased hover amount (lift)
       hidden: boolean;
       phase: number;
       roll: number;
@@ -642,6 +648,8 @@ export function ObjectsHero() {
           const s = p.slot;
           const flat = s.flat ?? 1;
           const lying = s.flat !== undefined;
+          // mirrored photos turn the same way as the desk (its right side is farther away)
+          const mx = s.mirror ? -1 : 1;
           // its own turn, one after another (back row first)
           const g = clamp01((land - p.delay * STAGGER.spread) / STAGGER.span);
           const m = placeMotion(g);
@@ -654,26 +662,36 @@ export function ObjectsHero() {
           // carried to just above its place, then lowered straight down onto the desk
           carryV.set(lerp(p.bx, s.Pup.x, m.carry), lerp(p.by, s.Pup.y, m.carry), lerp(p.bz + wob, s.Pup.z, m.carry));
           p.mesh.position.copy(carryV).lerp(s.P, m.down);
+          // hover: picked up a little
+          p.mesh.position.y += 0.22 * p.hv;
           // turn to its resting angle; lying objects also tip down flat (vertical squash) as they come
           p.flatG.scale.y = lerp(1, flat, m.carry);
           if (p.plane) {
             p.plane.rotation.z = s.tilt * m.carry;
             if (lying) {
-              p.plane.scale.set(p.pw, p.ph, 1);
+              p.plane.scale.set(p.pw * mx, p.ph, 1);
               p.plane.position.y = 0;
             } else {
               // a hair of squash on contact, keeping the bottom on the desk
-              p.plane.scale.set(p.pw * m.squashX, p.ph * m.squashY, 1);
+              p.plane.scale.set(p.pw * mx * m.squashX, p.ph * m.squashY, 1);
               p.plane.position.y = -(1 - m.squashY) * p.ph * 0.5;
             }
           }
-          // contact shadow: wide and faint while it is up, tight and dark once it rests
+          // contact shadow: wide and faint while it is up, tight and dark once it rests (softer while hovered)
           const objH = s.h * viewH;
           const objW = objH * p.aspect;
-          const sz = lying ? flatShadowSize(objW, objH, s.tilt, flat, m.shadowScale) : shadowSize(objW, m.shadowScale);
+          const sz = lying ? flatShadowSize(objW, objH, s.tilt, flat, m.shadowScale) : shadowSize(objW, m.shadowScale * (1 + 0.12 * p.hv));
           s.shadow.style.width = `${sz.w.toFixed(0)}px`;
           s.shadow.style.height = `${sz.h.toFixed(0)}px`;
-          s.shadow.style.opacity = String((m.shadowOpacity * dk).toFixed(3));
+          s.shadow.style.opacity = String((m.shadowOpacity * dk * (1 - 0.35 * p.hv)).toFixed(3));
+          // hover area over the resting object (only once it has been set down)
+          const landed = g >= 1;
+          s.hot.style.width = `${(objW * 0.86).toFixed(0)}px`;
+          s.hot.style.pointerEvents = landed && cp > 0.2 ? 'auto' : 'none';
+          if (!landed && p.hover) {
+            p.hover = false;
+            tip!.style.opacity = '0';
+          }
         } else {
           p.land = 0;
           p.rock = 0;
@@ -734,7 +752,7 @@ export function ObjectsHero() {
         } else if (!introOn) p.hidden = false;
         const target = p.hidden ? 0 : 1;
         p.vis += (target - p.vis) * k;
-        p.mesh.scale.setScalar(p.scale * Math.max(0.001, p.vis) * p.f * shrink);
+        p.mesh.scale.setScalar(p.scale * Math.max(0.001, p.vis) * p.f * shrink * (1 + 0.035 * p.hv));
       }
     }
 
@@ -782,6 +800,15 @@ export function ObjectsHero() {
       frame(true);
     }
 
+    // tooltip next to the cursor
+    const moveTip = (e: MouseEvent) => {
+      const r = host.getBoundingClientRect();
+      const x = e.clientX - r.left;
+      const y = e.clientY - r.top;
+      const flip = x > r.width - 320; // keep it on screen near the right edge
+      tip.style.transform = `translate3d(${(flip ? x - 16 - tip.offsetWidth : x + 16).toFixed(0)}px, ${(y + 18).toFixed(0)}px, 0)`;
+    };
+
     {
       const mobile = host.getBoundingClientRect().width < 768;
       const g = mobile ? GRID.mobile : GRID.desktop;
@@ -800,8 +827,8 @@ export function ObjectsHero() {
         const size = ASSETS[kind].size * SIZE_BOOST * (mobile ? 0.85 : 1);
         const piece: Piece = {
           mesh: outerG, flatG, plane: null, kind, layer, x, y, z, bx: 0, by: 0, bz: z, delay: Q(), scale, radius: size * 0.5,
-          halfH: size * 0.4, pw: size, ph: size, aspect: 1, vis: 1, f: 1, land: 0, rock: 0, hidden: false, phase, roll,
-          speed: 0.12 + 0.15 * Q(), slot: null,
+          halfH: size * 0.4, pw: size, ph: size, aspect: 1, vis: 1, f: 1, land: 0, rock: 0, hover: false, hv: 0,
+          hidden: false, phase, roll, speed: 0.12 + 0.15 * Q(), slot: null,
         };
         getKind(kind).then((res) => {
           if (!res || disposed) return;
@@ -860,7 +887,23 @@ export function ObjectsHero() {
         const shadow = document.createElement('div');
         shadow.style.cssText = `${s.flat ? SHADOW_FLAT_CSS : SHADOW_CSS}left:${(s.x * 100).toFixed(2)}%;top:${(s.y * 100).toFixed(2)}%;`;
         shadowsEl.appendChild(shadow);
-        cand.slot = { ...s, dist: slotDist(s.y), P: new THREE.Vector3(), Pup: new THREE.Vector3(), shadow };
+        // invisible hover area over the object: lifts it and shows its line in the tooltip
+        const hot = document.createElement('div');
+        const top = s.flat ? s.y - (s.h * (s.flat ?? 1)) / 2 : s.y - s.h;
+        hot.style.cssText = `position:absolute;left:${(s.x * 100).toFixed(2)}%;top:${(top * 100).toFixed(2)}%;height:${(s.h * (s.flat ?? 1) * 100).toFixed(2)}%;transform:translateX(-50%);pointer-events:none;cursor:pointer;border-radius:24px;`;
+        hot.addEventListener('mouseenter', (e) => {
+          cand.hover = true;
+          tip.textContent = s.label;
+          moveTip(e);
+          tip.style.opacity = '1';
+        });
+        hot.addEventListener('mousemove', moveTip);
+        hot.addEventListener('mouseleave', () => {
+          cand.hover = false;
+          tip.style.opacity = '0';
+        });
+        hotEl.appendChild(hot);
+        cand.slot = { ...s, dist: slotDist(s.y), P: new THREE.Vector3(), Pup: new THREE.Vector3(), shadow, hot };
         cand.delay = i / Math.max(1, order.length - 1);
       });
     }
@@ -933,6 +976,8 @@ export function ObjectsHero() {
       F += (-W * R * calm - F) * r;
       Y += (D * R * calm - Y) * r;
       sp += (prog - sp) * (1 - Math.exp(-dt * 6));
+      const hk = 1 - Math.exp(-dt * 12);
+      for (const p of pieces) if (p.slot) p.hv += ((p.hover ? 1 : 0) - p.hv) * hk;
       frame(false);
       raf = requestAnimationFrame(tick);
     }
@@ -1050,6 +1095,7 @@ export function ObjectsHero() {
       canvas.style.opacity = '';
       showHeader();
       shadowsEl.innerHTML = '';
+      hotEl.innerHTML = '';
       textGroup.children.forEach((m) => (m as THREE.Mesh).geometry.dispose());
       planeGeo.dispose();
       mats.forEach((m) => m.dispose());
@@ -1117,6 +1163,15 @@ export function ObjectsHero() {
         />
 
         <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full" style={{ cursor: 'grab', touchAction: 'pan-y' }} aria-hidden="true" />
+
+        {/* hover areas over the landed desk objects (added by the scene), and the tooltip they show */}
+        <div ref={hotRef} className="pointer-events-none absolute inset-0 z-[2]" aria-hidden="true" />
+        <div
+          ref={tipRef}
+          role="tooltip"
+          className="pointer-events-none absolute left-0 top-0 z-[4] max-w-[300px] rounded-[8px] bg-[#1C1C1E] px-[12px] py-[8px] text-[16px] leading-[1.35] text-white shadow-[0_8px_24px_rgba(5,8,38,0.25)]"
+          style={{ opacity: 0, transition: 'opacity .15s ease' }}
+        />
 
         {/* desk scene copy: same spot and amount as the reference — two-line headline + one button (PLACEHOLDER copy).
             The button is rounded like the header's CV button (8px). */}
