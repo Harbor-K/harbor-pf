@@ -1,6 +1,6 @@
 /**
- * Blue-dark tone taken from the home hero (cobalt field + white 3D type with a deep cobalt side),
- * shared by every section below it and by the Work page.
+ * Blue-dark tone taken from the home hero (cobalt field + white 3D type with a deep cobalt side).
+ * Used by the Work page (#/work) and the footer's dark variant there.
  */
 export const DARK = {
   deep: '#050826',

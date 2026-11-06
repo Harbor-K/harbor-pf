@@ -2,11 +2,10 @@ import React, { useEffect, useRef } from 'react';
 import { hashString, mulberry32 } from '../utils/random';
 
 /**
- * Dot harbour for the footer (on the blue-dark tone).
- * The ground is a still, colourful landscape of round dots (cobalt -> bright blue -> periwinkle -> yellow -> red -> lime,
+ * Dot harbour for the footer.
+ * The ground is a still, colourful landscape of round dots (navy -> cobalt -> yellow -> red -> lime,
  * with a few lighter tints and loose dots above) along the bottom `height` px. It doesn't move.
- * In the middle, a lighthouse made of the same dots (red / pale-lavender stripes, readable on navy) stands on a low pier.
- * Only its light moves:
+ * In the middle, a lighthouse made of the same dots stands on a low pier. Only its light moves:
  * - Beam: the lamp throws a wide beam of yellow dots (on the same dot grid) that turns a full 360°
  *   to follow the cursor across the whole footer, behind the text.
  * - Facing you: when the cursor comes near the lighthouse, the light turns towards the viewer —
@@ -15,15 +14,18 @@ import { hashString, mulberry32 } from '../utils/random';
  *   The lighthouse itself stays drawn on top, so it never washes out.
  * Dots grow and brighten towards the centre of the light, so the edges feather off naturally.
  * With no cursor around, the beam slowly sweeps like a real lighthouse.
+ * `dark`: palette for the navy footer on the Work page (blues instead of navy, pale-lavender lighthouse stripes).
  */
 
 const SPACING = 13;
 const DOT_R = 4.6;
 const BOTTOM_PAD = 10;
-const LAYERS = ['#2238D0', '#2238D0', '#3653F0', '#6B7BFF', '#F5C518', '#F5C518', '#E0492A', '#D8FF00'];
+const LAYERS_LIGHT = ['#1C2541', '#1C2541', '#3B5BD9', '#3B5BD9', '#F5C518', '#F5C518', '#E0492A', '#D8FF00'];
+const LAYERS_DARK = ['#2238D0', '#2238D0', '#3653F0', '#6B7BFF', '#F5C518', '#F5C518', '#E0492A', '#D8FF00'];
 
 // lighthouse (in dot rows from the bottom)
-const NAVY = '#C3C9F2'; // the light stripe (pale lavender on the navy footer)
+const STRIPE_LIGHT = '#1C2541';
+const STRIPE_DARK = '#C3C9F2';
 const RED = '#E0492A';
 const LAMP = '#FFE600';
 const ZONE = 8; // columns either side of the centre kept as a low pier around the lighthouse
@@ -36,21 +38,21 @@ const FACE_FAR = 230; // beyond this it's a normal beam
 const GLOW_R = 240; // radius of the round glow (px)
 
 /** colour of the lighthouse dot at column offset dc and row r, or null if empty */
-function lighthouseDot(dc: number, r: number, rows: number): string | null {
+function lighthouseDot(dc: number, r: number, rows: number, stripe: string): string | null {
   const a = Math.abs(dc);
   const top = Math.min(rows - 1, 18);
   const lampRow = top - 4; // lamp room: two rows
   if (r >= 3 && r < lampRow - 1) {
-    // tower: wider at the base, red / light stripes every two rows
+    // tower: wider at the base, red / stripe colour every two rows
     const hw = r < 7 ? 2 : 1;
     if (a > hw) return null;
-    return Math.floor((r - 3) / 2) % 2 === 0 ? RED : NAVY;
+    return Math.floor((r - 3) / 2) % 2 === 0 ? RED : stripe;
   }
-  if (r === lampRow - 1) return a <= 2 ? NAVY : null; // gallery / railing
+  if (r === lampRow - 1) return a <= 2 ? stripe : null; // gallery / railing
   if (r === lampRow || r === lampRow + 1) return a <= 1 ? LAMP : null; // lamp room
   if (r === lampRow + 2) return a <= 1 ? RED : null; // roof
   if (r === lampRow + 3) return a === 0 ? RED : null; // roof tip
-  if (r === lampRow + 4) return a === 0 ? NAVY : null; // vane
+  if (r === lampRow + 4) return a === 0 ? stripe : null; // vane
   return null;
 }
 
@@ -77,7 +79,7 @@ function glowColor(t: number) {
   return LAMP;
 }
 
-export function DotField({ height = 260, className = '', style }: { height?: number; className?: string; style?: React.CSSProperties }) {
+export function DotField({ height = 260, dark = false, className = '', style }: { height?: number; dark?: boolean; className?: string; style?: React.CSSProperties }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -88,6 +90,8 @@ export function DotField({ height = 260, className = '', style }: { height?: num
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const LAYERS = dark ? LAYERS_DARK : LAYERS_LIGHT;
+    const STRIPE = dark ? STRIPE_DARK : STRIPE_LIGHT;
 
     let width = 0;
     let total = height; // full canvas height (the parent's height)
@@ -249,7 +253,7 @@ export function DotField({ height = 260, className = '', style }: { height?: num
       // lighthouse on top
       for (let dc = -2; dc <= 2; dc++) {
         for (let r = 3; r < rows; r++) {
-          const col = lighthouseDot(dc, r, rows);
+          const col = lighthouseDot(dc, r, rows, STRIPE);
           if (col) dot(xOf(cc + dc), yOf(r), col, 1);
         }
       }
@@ -288,7 +292,7 @@ export function DotField({ height = 260, className = '', style }: { height?: num
       ro.disconnect();
       io.disconnect();
     };
-  }, [height]);
+  }, [height, dark]);
 
   return (
     <div ref={wrapRef} className={`select-none pointer-events-none ${className}`} style={style} aria-hidden="true">

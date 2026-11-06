@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { PAGES } from '../sections/Experience';
 import { ASSETS } from '../../data/content';
 import { Contact } from '../sections/Contact';
 import { DARK, SECTION_BG, extrude } from '../theme';
@@ -8,17 +7,46 @@ import { DARK, SECTION_BG, extrude } from '../theme';
  * Work page (#/work): every case study as a card, on the home hero's blue-dark tone.
  * Big white 3D "Work" heading (the hero headline's cobalt extrusion), then one card per project with
  * its picture, name, title, year and one line — the same wording as the Projects section on the home page.
- * Cards lift on hover like the header's CV key and open the case study. The site footer closes the page.
+ * Cards lift on hover like the header's CV key and open the case study. The footer closes the page (dark variant).
  */
-const IMAGES: Record<string, { src: string; fit: 'cover' | 'contain'; bg: string }> = {
-  'TRUST BANK': { src: ASSETS.trustBank, fit: 'cover', bg: DARK.mid },
-  GAMECOVE: { src: ASSETS.gamecove, fit: 'cover', bg: DARK.mid },
-  UTRADA: { src: ASSETS.utrada, fit: 'contain', bg: '#8301D5' },
-};
+const PROJECTS = [
+  {
+    name: 'TRUST BANK',
+    year: '2026',
+    title: 'Rewards\nUX revamp',
+    sub: '2-person project: research, revamp and usability testing',
+    href: '#/trust-bank',
+    bg: 'linear-gradient(180deg, #4A66F5 0%, #3653F0 45%, #2238D0 100%)',
+    img: ASSETS.trustBank,
+    fit: 'cover' as const,
+    imgBg: DARK.mid,
+  },
+  {
+    name: 'GAMECOVE',
+    year: '2026',
+    title: 'AI analytics dashboard',
+    sub: '2-person project: helps first-time game creators decide what to fix next',
+    href: '#/gamecove',
+    bg: 'linear-gradient(180deg, #2238D0 0%, #1A2BA6 50%, #152391 100%)',
+    img: ASSETS.gamecove,
+    fit: 'cover' as const,
+    imgBg: DARK.mid,
+  },
+  {
+    name: 'UTRADA',
+    year: '2025',
+    title: 'Trading platform design system',
+    sub: '100+ components for a global trading platform, 40% faster dev cycles',
+    href: '#/utrada',
+    bg: `linear-gradient(180deg, #152391 0%, #101C80 45%, ${DARK.navy} 85%, ${DARK.navy} 100%)`,
+    img: ASSETS.utrada,
+    fit: 'contain' as const,
+    imgBg: '#8301D5',
+  },
+];
 
 function Card({ i }: { i: number }) {
-  const pg = PAGES[i];
-  const img = IMAGES[pg.name];
+  const pg = PROJECTS[i];
   const [on, setOn] = useState(false);
   return (
     <a
@@ -36,15 +64,13 @@ function Card({ i }: { i: number }) {
         animation: `work-card-in .8s cubic-bezier(.22,1,.36,1) ${0.15 + i * 0.12}s both`,
       }}
     >
-      <div className="relative aspect-[4/3] w-full overflow-hidden" style={{ background: img?.bg ?? DARK.mid }}>
-        {img && (
-          <img
-            src={img.src}
-            alt={pg.name}
-            loading={i === 0 ? 'eager' : 'lazy'}
-            className={`absolute inset-0 h-full w-full transition-transform duration-700 ease-out group-hover:scale-[1.04] ${img.fit === 'cover' ? 'object-cover' : 'object-contain p-[18%]'}`}
-          />
-        )}
+      <div className="relative aspect-[4/3] w-full overflow-hidden" style={{ background: pg.imgBg }}>
+        <img
+          src={pg.img}
+          alt={pg.name}
+          loading={i === 0 ? 'eager' : 'lazy'}
+          className={`absolute inset-0 h-full w-full transition-transform duration-700 ease-out group-hover:scale-[1.04] ${pg.fit === 'cover' ? 'object-cover' : 'object-contain p-[18%]'}`}
+        />
       </div>
       <div className="flex flex-1 flex-col p-6 md:p-8">
         <p className="text-[16px] font-bold tracking-[0.08em]" style={{ color: DARK.lav }}>
@@ -85,13 +111,13 @@ export function WorkPage() {
             Work
           </h1>
           <div className="mt-14 grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
-            {PAGES.map((_, i) => (
-              <Card key={PAGES[i].name} i={i} />
+            {PROJECTS.map((p, i) => (
+              <Card key={p.name} i={i} />
             ))}
           </div>
         </div>
       </main>
-      <Contact />
+      <Contact dark />
     </div>
   );
 }

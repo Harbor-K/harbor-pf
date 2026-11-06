@@ -2,6 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
 import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
+import {
+  DESK_EDGE, DESK_TOP, DESK_TOP_NEAR, DESK_EDGE_SHADE, SIDE_WALL, WALL_FILL, DESK_CAM, DESK_LOOK_Y, LAND_DIST,
+  SLOTS_DESKTOP, SLOTS_MOBILE, type DeskSlot,
+} from './deskScene';
 
 /**
  * Home hero, rebuilt from agentcard.com's main section (same scene and motion, Harbor's content and colours).
@@ -22,25 +26,22 @@ import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
  * Objects: photoreal cut-outs of a UX designer's kit, generated on a green screen and keyed out in the browser,
  * saturated and then dimmed (blue multiply + navy fog) like agentcard's objects.
  *
- * Scroll (the hero stays pinned while this plays):
+ * Scroll — "the desk", laid out like Harbor's ClassPass reference (gift-card hero): same frame, same copy spot
+ * and amount (a two-line headline + one button, top-left), same desk shape (back edge from the left side up to a
+ * corner near the right, darker side wall past it), props spread centre-right. Tuning lives in ./deskScene.ts.
  *  1. The headline falls back into the scene and disappears.
- *  2. All the objects fly together into one slowly spinning sphere.
- *  3. The sphere tightens to the size of the Experience section's portrait coin and spins up; the objects shrink
- *     into its core while the video of Harbor at her laptop opens from the centre like an iris.
- *  4. A hole opens around the coin and widens to the screen edges. The Experience section is already pinned
- *     underneath (it overlaps the end of this hero by HERO_OVERLAP_VH), so its white page spreads out from the coin.
+ *  2. The background flattens into the plain blue wall and the desk slides up into place.
+ *  3. Seven of the floating objects drop onto the desk, one after another, where the reference has its props,
+ *     and settle with soft shadows in full colour; the rest drift out of frame.
+ *  4. The copy fades in (PLACEHOLDER copy for now). Then the page moves on.
  *
  *  - Mouse move: the camera swings around the headline. Drag: rotates the whole world.
  */
 
-/** How far (vh) the Experience section slides under the end of this hero. Work.tsx reads it. */
+/** Kept for Work.tsx (the old Experience coin section, no longer on the home page). */
 export const HERO_OVERLAP_VH = 80;
 /** Scroll length (vh) the pinned hero uses for its story. */
-const STORY_VH = 280;
-const HOLD = (STORY_VH - HERO_OVERLAP_VH) / STORY_VH; // progress at which Experience is pinned underneath
-
-const PORTRAIT_VIDEO = 'https://raw.githubusercontent.com/Harbor-K/harbor-pf/main/assets/main-v2/desk-coin.mp4';
-const PORTRAIT_POSTER = 'https://raw.githubusercontent.com/Harbor-K/harbor-pf/main/assets/main-v2/desk-coin-poster.jpg';
+const STORY_VH = 230;
 
 const BG_FILL = 'radial-gradient(ellipse 75% 70% at 50% 48%, #3653F0 0%, #2238D0 38%, #152391 66%, #0A1050 86%, #050826 100%)';
 const FG = '#FFFFFF';
@@ -54,6 +55,7 @@ const SPREAD = 0.44;
 const GRID = { desktop: { cols: 8, rows: 5, clearX: 0.85, clearY: 0.36 }, mobile: { cols: 3, rows: 7, clearX: 2, clearY: 0.45 } };
 const SURROUND = { desktop: 31, mobile: 15 };
 const SHELL = { x: 13.5, y: 8.5, z: 12 };
+const DESK_CAM_V = new THREE.Vector3(DESK_CAM.x, DESK_CAM.y, DESK_CAM.z);
 
 // intro
 const INTRO_BG = 'radial-gradient(ellipse 70% 75% at 50% 50%, #05061A 0%, #0B1258 42%, #2A1B78 72%, #4A2390 88%, #1A0B33 100%)';
@@ -75,8 +77,6 @@ const I_END = I_START_HAND + I_HAND;
 const LOGO_SCALE = 2.4;
 const LOGO_SCALE_MOBILE = 1.7;
 const LOGO_GAP = 26;
-// same 3D type as the header wordmark (HomeDock textExtrude(3))
-const LOGO_EXTRUDE = '0 1px 0 #1A2BA6, 0 2px 0 #1A2BA6, 0 3px 0 #121C78';
 
 const SATURATION = 1.55;
 const CONTRAST = 1.12;
@@ -207,8 +207,11 @@ export function ObjectsHero() {
   const outerRef = useRef<HTMLElement>(null);
   const sectionRef = useRef<HTMLDivElement>(null);
   const bgRef = useRef<HTMLDivElement>(null);
+  const wallRef = useRef<HTMLDivElement>(null);
+  const deskRef = useRef<HTMLDivElement>(null);
+  const shadowsRef = useRef<HTMLDivElement>(null);
+  const copyRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
   const introBlackRef = useRef<HTMLDivElement>(null);
   const introBgRef = useRef<HTMLDivElement>(null);
   const ringRef = useRef<HTMLDivElement>(null);
@@ -220,12 +223,15 @@ export function ObjectsHero() {
     const host = sectionRef.current;
     const outer = outerRef.current;
     const bg = bgRef.current;
-    const video = videoRef.current;
+    const wall = wallRef.current;
+    const deskEl = deskRef.current;
+    const shadowsEl = shadowsRef.current;
+    const copy = copyRef.current;
     const iBlack = introBlackRef.current;
     const iBg = introBgRef.current;
     const ringEl = ringRef.current;
     const fly = flyRef.current;
-    if (!canvas || !host || !outer || !bg || !video || !iBlack || !iBg || !ringEl || !fly) return;
+    if (!canvas || !host || !outer || !bg || !wall || !deskEl || !shadowsEl || !copy || !iBlack || !iBg || !ringEl || !fly) return;
 
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
     const html = document.documentElement;
@@ -305,6 +311,7 @@ export function ObjectsHero() {
     const LOOK_X = 0;
     const FOV_HALF = THREE.MathUtils.degToRad(17.5);
     const frustumH = (z: number) => 2 * Math.tan(FOV_HALF) * (23 - z);
+    const landFrustumH = 2 * Math.tan(FOV_HALF) * LAND_DIST; // frame height in world units where objects land
     const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
 
     let disposed = false;
@@ -327,17 +334,17 @@ export function ObjectsHero() {
     // scroll story
     let prog = 0;
     let sp = 0;
-    const story = { s1: 0, g: 0, k: 0, v: 0, b: 0 };
-    let spinA = 0;
-    let rCoin = 3;
-    let rBig = 6;
-    let disc = { cx: 0, cy: 0, d: 300 };
-    let synced = false;
+    const story = { s1: 0, d: 0, desk: 0, land: 0, out: 0, copy: 0 };
 
     const scene = new THREE.Scene();
-    scene.fog = new THREE.Fog(FOG.color, FOG.near, FOG.far);
+    const fog = new THREE.Fog(FOG.color, FOG.near, FOG.far);
+    scene.fog = fog;
     const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 1200);
     camera.position.z = 23;
+    // where the camera ends up for the desk shot; used to put the landed objects on exact spots of the frame
+    const deskCam = new THREE.PerspectiveCamera(35, 1, 0.1, 1200);
+    deskCam.position.copy(DESK_CAM_V);
+    deskCam.lookAt(0, DESK_LOOK_Y, 0);
     const world = new THREE.Group();
     scene.add(world);
     const textGroup = new THREE.Group();
@@ -379,6 +386,8 @@ export function ObjectsHero() {
     const cNear = new THREE.Color(EXT_NEAR);
     const cFar = new THREE.Color(EXT_FAR);
     const cSide = new THREE.Color(SIDE_COLOR);
+    const cDim = new THREE.Color(DIM_TINT);
+    const cWhite = new THREE.Color('#FFFFFF');
 
     const planeGeo = new THREE.PlaneGeometry(1, 1);
     const textures: THREE.Texture[] = [];
@@ -405,8 +414,10 @@ export function ObjectsHero() {
     let K = 2026;
     const Q = () => ((K = (16807 * K) % 0x7fffffff) - 1) / 0x7ffffffe;
 
+    type Slot = DeskSlot & { P: THREE.Vector3; shadow: HTMLDivElement };
     type Piece = {
       mesh: THREE.Group;
+      kind: Kind;
       layer: 'grid' | 'shell';
       x: number;
       y: number;
@@ -414,17 +425,19 @@ export function ObjectsHero() {
       bx: number;
       by: number;
       bz: number;
-      ux: number;
-      uy: number;
-      uz: number;
       delay: number;
       scale: number;
       radius: number;
+      halfH: number;
+      aspect: number; // width / height of the cut-out
       vis: number;
+      f: number; // extra scale from the story (landing / leaving)
+      land: number; // 0..1 how settled on the desk
       hidden: boolean;
       phase: number;
       roll: number;
       speed: number;
+      slot: Slot | null;
     };
     let pieces: Piece[] = [];
 
@@ -433,10 +446,24 @@ export function ObjectsHero() {
     }
 
     const tmpV = new THREE.Vector3();
+    const rayV = new THREE.Vector3();
+    const camPos = new THREE.Vector3();
     const tBox = new THREE.Box3();
     const tCenter = new THREE.Vector3();
     const corner = new THREE.Vector3();
     const textLocalBox = new THREE.Box3();
+
+    /** world point LAND_DIST in front of the desk camera, at screen fraction (fx, fy) */
+    function landPoint(fx: number, fy: number, out: THREE.Vector3) {
+      rayV.set(fx * 2 - 1, 1 - fy * 2, 0.5).unproject(deskCam).sub(deskCam.position).normalize();
+      return out.copy(deskCam.position).addScaledVector(rayV, LAND_DIST);
+    }
+    function placeSlots() {
+      deskCam.aspect = camera.aspect;
+      deskCam.updateProjectionMatrix();
+      deskCam.updateMatrixWorld(true);
+      for (const p of pieces) if (p.slot) landPoint(p.slot.x, p.slot.y - p.slot.h / 2, p.slot.P);
+    }
 
     /** top edge of the headline on screen (px) */
     function headlineTop() {
@@ -474,7 +501,6 @@ export function ObjectsHero() {
       fly.style.top = `${lr.top}px`;
       fly.style.transform = `translate3d(${(cx - (sc * w) / 2 - lr.left).toFixed(1)}px, ${(cy - (sc * h) / 2 - lr.top).toFixed(1)}px, 0) scale(${sc.toFixed(4)})`;
       fly.style.opacity = String(light);
-      fly.style.textShadow = p > 0.45 ? LOGO_EXTRUDE : 'none';
       if (p >= 1) landLogo();
     }
 
@@ -534,16 +560,18 @@ export function ObjectsHero() {
     };
 
     function pose() {
-      const e = reduce.matches ? 0 : 0.3 * (1 - 0.6 * story.g) * mouseGain;
+      const d = story.d;
+      const e = reduce.matches ? 0 : 0.3 * (1 - d) * mouseGain;
       const t = e * Math.sin(0.7 * U);
       const r = e * Math.sin(0.3 * U);
       const a = e * Math.sin(0.2 * U);
-      world.rotation.set(H + t, X + r, a);
+      world.rotation.set(lerp(H, 0, d) + t, lerp(X, 0, d) + r, a);
       textGroup.rotation.set(-iv.tilt, 0, t - a);
       const n = F - LOOK_X;
       const k = Math.min(1, 27 / Math.hypot(n, Y, 23));
-      camera.position.set(LOOK_X + n * k, Y * k, 23 * k);
-      camera.lookAt(LOOK_X, 0, 0);
+      camPos.set(LOOK_X + n * k, Y * k, 23 * k).lerp(DESK_CAM_V, d);
+      camera.position.copy(camPos);
+      camera.lookAt(LOOK_X, DESK_LOOK_Y * d, 0);
     }
 
     const invWorldQ = new THREE.Quaternion();
@@ -556,47 +584,28 @@ export function ObjectsHero() {
       faceQ.copy(invWorldQ).multiply(camera.quaternion);
       for (const p of pieces) {
         const a = U * p.speed + p.phase;
-        wobE.set(0.22 * Math.sin(a), 0.32 * Math.cos(a), p.roll + 0.1 * Math.sin(a * 0.6));
+        const w = 1 - p.land; // settled objects stop bobbing
+        wobE.set(0.22 * Math.sin(a) * w, 0.32 * Math.cos(a) * w, p.roll * lerp(1, 0.2, p.land) + 0.1 * Math.sin(a * 0.6) * w);
         wobQ.setFromEuler(wobE);
         p.mesh.quaternion.copy(faceQ).multiply(wobQ);
       }
     }
 
-    /** Where the Experience coin is (or will be), in hero coordinates. */
-    function measureDisc() {
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
-      disc = { cx: viewW / 2, cy: viewH / 2, d: Math.max(240, Math.min(vw * 0.3, vh * 0.55)) };
-      const work = document.getElementById('experience');
-      const coin = document.querySelector('#experience [data-coin]');
-      if (work && coin && work.getBoundingClientRect().top <= 1) {
-        const r = coin.getBoundingClientRect();
-        const hr = host!.getBoundingClientRect();
-        if (r.width > 40) disc = { cx: r.left + r.width / 2 - hr.left, cy: r.top + r.height / 2 - hr.top, d: r.width };
-      }
-      const ppu = viewH / (2 * Math.tan(FOV_HALF) * 23);
-      rCoin = (disc.d / 2 / ppu) * 0.78;
-      rBig = Math.min(rCoin * 1.8, frustumH(0) * 0.36);
-    }
-
     /**
-     * Scroll story, one continuous motion (each step starts before the last one ends):
-     * headline is pulled into the centre while the objects fly in -> they settle into a spinning sphere ->
-     * the sphere tightens to the coin's size and spins faster, the objects shrink into its core while the video
-     * opens from the centre like an iris -> a hole opens around the coin and widens to the screen edges,
-     * so the white Experience section spreads out from the coin.
+     * Scroll story: the headline falls back -> the wall flattens and the desk slides up ->
+     * the chosen objects drop onto their spots one after another (the rest drift away) -> the copy fades in.
      */
     function applyStory() {
       story.s1 = smooth(0, 0.16, sp);
-      story.g = smooth(0.02, 0.38, sp);
-      story.k = smooth(0.3, 0.55, sp);
-      story.v = smooth(0.5, 0.68, sp);
-      story.b = smooth(HOLD + 0.01, HOLD + 0.14, sp);
-      const { s1, g, k, v, b } = story;
+      story.d = smooth(0.06, 0.4, sp);
+      story.desk = smooth(0.08, 0.38, sp);
+      story.out = smooth(0.06, 0.36, sp);
+      story.land = smooth(0.16, 0.62, sp);
+      story.copy = smooth(0.5, 0.68, sp);
+      const { s1, d, desk: dk, out, land, copy: cp } = story;
 
       faceMat.uniforms.flatMix.value = iv.flat;
       if (textW) {
-        // pulled into the middle of the forming sphere, not just faded
         const s = baseTextScale * Math.max(0.001, 1 - s1) * iv.scale;
         textGroup.scale.set(s, s, s * iv.depth);
         // the extrusion grows backwards: the letter faces stay where the hero's faces are
@@ -604,52 +613,46 @@ export function ObjectsHero() {
         textGroup.visible = s1 < 0.99;
       }
 
-      if (k > 0 || b > 0) measureDisc();
-      const cs = Math.cos(spinA);
-      const sn = Math.sin(spinA);
-      const rs = lerp(rBig, rCoin, k) * lerp(1, 0.5, v);
+      // the flat desk slides up from below
+      deskEl!.style.visibility = dk > 0.001 ? 'visible' : 'hidden';
+      deskEl!.style.transform = `translate3d(0, ${((1 - outCubic(dk)) * 75).toFixed(2)}%, 0)`;
+
+      // objects: brighter and out of the fog as the scene turns into the desk shot
+      for (const m of mats) m.color.copy(cDim).lerp(cWhite, 0.9 * d);
+      fog.near = lerp(FOG.near, 80, d);
+      fog.far = lerp(FOG.far, 200, d);
+
       for (const p of pieces) {
-        const gi = smooth(0, 1, g * 1.4 - p.delay * 0.4);
-        const wob = 0.7 * Math.sin(0.3 * U + p.phase) * (1 - gi);
-        const tx = (p.ux * cs + p.uz * sn) * rs;
-        const ty = p.uy * rs;
-        const tz = (-p.ux * sn + p.uz * cs) * rs;
-        p.mesh.position.set(lerp(p.bx, tx, gi), lerp(p.by, ty, gi), lerp(p.bz + wob, tz, gi));
-      }
-      for (const m of mats) m.opacity = 1 - v * v;
-      canvas!.style.visibility = v >= 0.999 ? 'hidden' : 'visible';
-
-      // the video opens from the centre of the sphere like an iris
-      if (v > 0 && b === 0) {
-        video!.style.visibility = 'visible';
-        video!.style.width = `${disc.d}px`;
-        video!.style.height = `${disc.d}px`;
-        video!.style.left = `${disc.cx - disc.d / 2}px`;
-        video!.style.top = `${disc.cy - disc.d / 2}px`;
-        video!.style.clipPath = `circle(${(50 * v).toFixed(2)}% at 50% 50%)`;
-        video!.style.transform = `scale(${1.06 - 0.06 * v})`;
-        if (video!.paused) video!.play().catch(() => {});
-      } else video!.style.visibility = 'hidden';
-
-      // hand-off: line the coin's video up with ours, then open a hole at the coin that widens to the edges
-      if (b > 0 && !synced) {
-        const coinVideo = document.querySelector('#experience [data-coin] video') as HTMLVideoElement | null;
-        if (coinVideo && coinVideo.readyState > 0) {
-          try {
-            coinVideo.currentTime = video!.currentTime;
-          } catch {}
+        if (p.slot) {
+          const gi = smooth(0, 1, land * 1.7 - p.delay * 0.7);
+          p.land = gi;
+          // landed size = the slot's height on screen
+          const fLand = (p.slot.h * landFrustumH) / Math.max(0.001, 2 * p.halfH * p.scale);
+          p.f = lerp(1, fLand, gi);
+          const e = outCubic(gi);
+          const wob = 0.7 * Math.sin(0.3 * U + p.phase) * (1 - gi);
+          const P = p.slot.P;
+          p.mesh.position.set(lerp(p.bx, P.x, e), lerp(p.by, P.y, e) + 1.6 * Math.sin(Math.PI * e) * (1 - e), lerp(p.bz + wob, P.z, e));
+          // contact shadow (flat, on the desk) under the object
+          const sh = p.slot.shadow;
+          const wPx = p.slot.h * viewH * p.aspect;
+          sh.style.width = `${(wPx * 1.05).toFixed(0)}px`;
+          sh.style.height = `${(wPx * 0.2).toFixed(0)}px`;
+          sh.style.opacity = String((gi * gi * dk).toFixed(3));
+        } else {
+          p.land = 0;
+          p.f = Math.max(0.001, 1 - out);
+          const wob = 0.7 * Math.sin(0.3 * U + p.phase);
+          const push = 1 + 1.3 * out;
+          p.mesh.position.set(p.bx * push, p.by * push + 5 * out, p.bz + wob);
         }
-        synced = true;
       }
-      if (b === 0) synced = false;
-      if (b > 0) {
-        const far = Math.hypot(Math.max(disc.cx, viewW - disc.cx), Math.max(disc.cy, viewH - disc.cy)) + 4;
-        const r = lerp(disc.d / 2 - 1, far, b);
-        const w = viewW;
-        const h = viewH;
-        host!.style.clipPath = `path(evenodd, 'M0 0H${w}V${h}H0Z M${disc.cx - r} ${disc.cy}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0Z')`;
-      } else host!.style.clipPath = '';
-      host!.style.visibility = b >= 0.999 ? 'hidden' : 'visible';
+
+      // wall and copy
+      wall!.style.opacity = String(d);
+      copy!.style.opacity = String(cp);
+      copy!.style.transform = `translateY(${((1 - cp) * 28).toFixed(1)}px)`;
+      copy!.style.pointerEvents = cp > 0.6 ? 'auto' : 'none';
     }
 
     function keepTitleClear(instant: boolean) {
@@ -678,9 +681,9 @@ export function ObjectsHero() {
       }
       const k = instant ? 1 : 0.12;
       const pxPerUnit = viewH / (2 * Math.tan(FOV_HALF));
-      const shrink = lerp(1, 0.55, story.g) * lerp(1, 0.8, story.k) * Math.max(0.001, 1 - 0.9 * story.v) * Math.max(0.001, iv.obj);
+      const shrink = Math.max(0.001, iv.obj);
       for (const p of pieces) {
-        if (tr) {
+        if (tr && p.land < 0.05) {
           tmpV.setFromMatrixPosition(p.mesh.matrixWorld);
           const d = camera.position.distanceTo(tmpV);
           let over = false;
@@ -695,7 +698,7 @@ export function ObjectsHero() {
         } else if (!introOn) p.hidden = false;
         const target = p.hidden ? 0 : 1;
         p.vis += (target - p.vis) * k;
-        p.mesh.scale.setScalar(p.scale * Math.max(0.001, p.vis) * shrink);
+        p.mesh.scale.setScalar(p.scale * Math.max(0.001, p.vis) * p.f * shrink);
       }
     }
 
@@ -720,21 +723,6 @@ export function ObjectsHero() {
       c.mesh.position.set(c.bx, c.by, c.bz);
     }
 
-    /** Spread the pieces evenly over a sphere; top pieces go to the top of the sphere so nothing crosses far. */
-    function assignSphere() {
-      const n = pieces.length;
-      const order = pieces.map((_, i) => i).sort((a, b) => pieces[b].by - pieces[a].by);
-      order.forEach((pi, j) => {
-        const yy = 1 - (2 * (j + 0.5)) / n;
-        const rr = Math.sqrt(1 - yy * yy);
-        const phi = j * 2.399963;
-        const p = pieces[pi];
-        p.ux = Math.cos(phi) * rr;
-        p.uy = yy;
-        p.uz = Math.sin(phi) * rr;
-      });
-    }
-
     function frame(instant: boolean) {
       applyStory();
       pose();
@@ -753,8 +741,7 @@ export function ObjectsHero() {
       renderer.setSize(rect.width, rect.height, false);
       fitText(rect.width);
       pieces.forEach((c) => placePiece(c));
-      assignSphere();
-      measureDisc();
+      placeSlots();
       logoFrom = null;
       frame(true);
     }
@@ -774,8 +761,8 @@ export function ObjectsHero() {
         world.add(outerG);
         const size = ASSETS[kind].size * SIZE_BOOST * (mobile ? 0.85 : 1);
         const piece: Piece = {
-          mesh: outerG, layer, x, y, z, bx: 0, by: 0, bz: z, ux: 0, uy: 1, uz: 0, delay: Q(),
-          scale, radius: size * 0.5, vis: 1, hidden: false, phase, roll, speed: 0.12 + 0.15 * Q(),
+          mesh: outerG, kind, layer, x, y, z, bx: 0, by: 0, bz: z, delay: Q(), scale, radius: size * 0.5,
+          halfH: size * 0.4, aspect: 1, vis: 1, f: 1, land: 0, hidden: false, phase, roll, speed: 0.12 + 0.15 * Q(), slot: null,
         };
         getKind(kind).then((res) => {
           if (!res || disposed) return;
@@ -783,6 +770,8 @@ export function ObjectsHero() {
           const w = res.aspect >= 1 ? size : size * res.aspect;
           const h = res.aspect >= 1 ? size / res.aspect : size;
           plane.scale.set(w, h, 1);
+          piece.halfH = h / 2;
+          piece.aspect = res.aspect;
           outerG.add(plane);
           if (reduce.matches || !raf) frame(true);
         });
@@ -817,6 +806,21 @@ export function ObjectsHero() {
         list.push(make('shell', dx * SHELL.x * s, yy * SHELL.y * s, dz * SHELL.z * s));
       }
       pieces = list;
+
+      // one floating object of each slot's kind goes to that spot (front-most first); drop order runs back to front
+      const slots = mobile ? SLOTS_MOBILE : SLOTS_DESKTOP;
+      const order = [...slots].sort((a, b) => a.y - b.y);
+      order.forEach((s, i) => {
+        const cand = pieces
+          .filter((p) => p.kind === s.kind && !p.slot)
+          .sort((a, b) => (a.layer === b.layer ? b.z - a.z : a.layer === 'grid' ? -1 : 1))[0];
+        if (!cand) return;
+        const shadow = document.createElement('div');
+        shadow.style.cssText = `position:absolute;left:${(s.x * 100).toFixed(2)}%;top:${(s.y * 100).toFixed(2)}%;transform:translate(-50%,-62%);border-radius:50%;opacity:0;pointer-events:none;background:radial-gradient(closest-side, rgba(12,22,90,0.34), rgba(12,22,90,0.16) 55%, rgba(12,22,90,0) 100%);`;
+        shadowsEl.appendChild(shadow);
+        cand.slot = { ...s, P: new THREE.Vector3(), shadow };
+        cand.delay = (i / Math.max(1, order.length - 1)) * 0.9;
+      });
     }
 
     new FontLoader().load(
@@ -883,11 +887,10 @@ export function ObjectsHero() {
         Y = 0;
       } else mouseGain = Math.min(1, mouseGain + dt / 1.8);
       const ease = mouseGain * mouseGain * (3 - 2 * mouseGain);
-      const calm = (1 - story.g) * ease; // the camera settles while the sphere forms so it lands on the coin
+      const calm = (1 - story.d) * ease; // the camera settles as it moves to the desk shot
       F += (-W * R * calm - F) * r;
       Y += (D * R * calm - Y) * r;
       sp += (prog - sp) * (1 - Math.exp(-dt * 6));
-      spinA += dt * (0.35 + 2.6 * story.v); // the sphere spins up as it collapses into the video
       frame(false);
       raf = requestAnimationFrame(tick);
     }
@@ -1004,6 +1007,7 @@ export function ObjectsHero() {
       html.style.overflow = prevOverflow;
       canvas.style.opacity = '';
       showHeader();
+      shadowsEl.innerHTML = '';
       textGroup.children.forEach((m) => (m as THREE.Mesh).geometry.dispose());
       planeGeo.dispose();
       mats.forEach((m) => m.dispose());
@@ -1013,6 +1017,7 @@ export function ObjectsHero() {
     };
   }, []);
 
+  const E = DESK_EDGE;
   return (
     <section
       id="home"
@@ -1028,6 +1033,25 @@ export function ObjectsHero() {
         style={{ backgroundColor: '#050826', fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' }}
       >
         <div ref={bgRef} className="pointer-events-none absolute inset-0" style={{ backgroundImage: BG_FILL }} aria-hidden="true" />
+        {/* the desk scene's plain blue wall (fades in on scroll) */}
+        <div ref={wallRef} className="pointer-events-none absolute inset-0" style={{ backgroundImage: WALL_FILL, opacity: 0 }} aria-hidden="true" />
+
+        {/* the desk (flat, like the reference): back edge from the left side up to a corner, darker side wall past it */}
+        <div ref={deskRef} className="pointer-events-none absolute inset-0 will-change-transform" style={{ visibility: 'hidden' }} aria-hidden="true">
+          <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="deskTop" x1="0" y1="1" x2="0.9" y2="0.15">
+                <stop offset="0" stopColor={DESK_TOP_NEAR} />
+                <stop offset="0.7" stopColor={DESK_TOP} />
+                <stop offset="1" stopColor={DESK_EDGE_SHADE} />
+              </linearGradient>
+            </defs>
+            <polygon points={`${E.cornerX * 100},0 100,0 100,${E.rightY * 100} ${E.cornerX * 100},${E.cornerY * 100}`} fill={SIDE_WALL} />
+            <polygon points={`0,${E.leftY * 100} ${E.cornerX * 100},${E.cornerY * 100} 100,${E.rightY * 100} 100,100 0,100`} fill="url(#deskTop)" />
+          </svg>
+          {/* contact shadows of the landed objects (added by the scene) */}
+          <div ref={shadowsRef} className="absolute inset-0" />
+        </div>
 
         {/* intro field: black under a navy/purple glow, and one ring of light that closes in on the headline */}
         <div ref={introBlackRef} className="pointer-events-none absolute inset-0 bg-black" aria-hidden="true" />
@@ -1044,21 +1068,30 @@ export function ObjectsHero() {
           }}
         />
 
-        <video
-          ref={videoRef}
-          className="pointer-events-none absolute rounded-full object-cover bg-[#0A0A0A]"
-          style={{ visibility: 'hidden', left: 0, top: 0, width: 0, height: 0 }}
-          src={PORTRAIT_VIDEO}
-          poster={PORTRAIT_POSTER}
-          muted
-          loop
-          playsInline
-          autoPlay
-          preload="metadata"
-          aria-hidden="true"
-        />
-
         <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full" style={{ cursor: 'grab', touchAction: 'pan-y' }} aria-hidden="true" />
+
+        {/* desk scene copy: same spot and amount as the reference — two-line headline + one button (PLACEHOLDER copy) */}
+        <div
+          ref={copyRef}
+          className="absolute z-[3] text-white"
+          style={{ left: 'max(16px, 7.2vw)', top: 'max(88px, 11.8%)', opacity: 0, pointerEvents: 'none' }}
+        >
+          <h2
+            className="font-bold tracking-[-0.035em]"
+            style={{ fontSize: 'max(40px, 5.2vw)', lineHeight: 0.97, whiteSpace: 'nowrap' }}
+          >
+            Every project starts
+            <br />
+            at this desk.
+          </h2>
+          <a
+            href="#/trust-bank"
+            className="inline-flex items-center justify-center rounded-[2px] bg-white font-medium text-black transition-opacity hover:opacity-90"
+            style={{ marginTop: 'max(24px, 1.95vw)', height: 'max(48px, 3.3vw)', padding: '0 max(18px, 1.2vw)', fontSize: 'max(16px, 1.15vw)' }}
+          >
+            See my work
+          </a>
+        </div>
 
         {/* intro wordmark: same type as the header's "harbor", flies into the header's top-left corner */}
         <div

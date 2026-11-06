@@ -9,57 +9,84 @@ const CASE_HREF: Record<string, string> = { 'Trust Bank': '#/trust-bank', GameCo
 const FOOTER_PROJECTS = [...PROJECTS.map((p) => p.name), 'UTrada'];
 const FIELD_H = 260; // the dot ground along the bottom
 const LINKEDIN_URL = '[URL]'; // TODO: Harbor's LinkedIn profile URL
-const LINK = 'text-lg text-white/85 hover:text-[#9DB0FF] transition-colors duration-150';
 
-/** Footer on the hero's blue-dark tone: navy deepening to the hero's edge colour, white type, lavender labels. */
-export function Contact() {
+/**
+ * Site footer. Default: white (home page, About page).
+ * `dark`: the hero's blue-dark tone, used on the Work page (white type, lavender labels, re-coloured dot harbour).
+ */
+export function Contact({ dark = false }: { dark?: boolean }) {
+  const label = dark ? 'mono-label' : 'mono-label text-[#8B8B8B]';
+  const labelStyle = dark ? { color: DARK.lav } : undefined;
+  const link = dark ? 'text-lg text-white/85 hover:text-[#9DB0FF] transition-colors duration-150' : 'text-lg hover:text-[#3B5BD9] transition-colors duration-150';
   return (
     <footer
       id="contact"
-      data-tone="dark"
-      className="relative overflow-hidden pt-24 text-white"
-      style={{ background: `linear-gradient(180deg, #080D44 0%, ${DARK.deep} 100%)` }}
+      data-tone={dark ? 'dark' : undefined}
+      className={`relative overflow-hidden pt-24 ${dark ? 'text-white' : 'bg-white'}`}
+      style={dark ? { background: `linear-gradient(180deg, #080D44 0%, ${DARK.deep} 100%)` } : undefined}
     >
-      {/* the dot harbour fills the whole footer: still ground at the bottom, lighthouse beam sweeps behind the text */}
-      <DotField height={FIELD_H} className="absolute inset-0 z-0" />
+      {!dark && <div className="absolute inset-0 dot-grid-bg pointer-events-none" />}
+
+      {/* the dot harbour fills the whole footer: still ground at the bottom, lighthouse beam sweeps the whole area behind the text */}
+      <DotField height={FIELD_H} dark={dark} className="absolute inset-0 z-0" />
 
       <div className="relative z-10 max-w-[1800px] mx-auto px-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-10 pb-14">
           <div className="md:col-span-2 flex flex-col gap-10">
-            <p className="font-inter-tight font-bold tracking-[-0.03em] text-[32px] leading-[1.1] max-w-md">
-              Hiring, building something, or just want to say hi?{' '}
-              <a
-                href={`mailto:${EMAIL}?subject=${encodeURIComponent("Hi Harbor — let's talk")}`}
-                className="group inline-flex items-baseline gap-[6px] transition-colors duration-150 hover:text-[#9DB0FF]"
-                style={{ textShadow: extrude(3) }}
-              >
-                Let's talk
-                <span aria-hidden className="inline-block transition-transform duration-200 group-hover:translate-x-1 group-hover:-translate-y-1">
-                  ↗
-                </span>
-              </a>
-            </p>
+            {/* class feedback (Nov 3): "Let's talk" should do something when clicked — it opens an email to Harbor */}
+            {dark ? (
+              <p className="font-inter-tight font-bold tracking-[-0.03em] text-[32px] leading-[1.1] max-w-md">
+                Hiring, building something, or just want to say hi?{' '}
+                <a
+                  href={`mailto:${EMAIL}?subject=${encodeURIComponent("Hi Harbor — let's talk")}`}
+                  className="group inline-flex items-baseline gap-[6px] transition-colors duration-150 hover:text-[#9DB0FF]"
+                  style={{ textShadow: extrude(3) }}
+                >
+                  Let's talk
+                  <span aria-hidden className="inline-block transition-transform duration-200 group-hover:translate-x-1 group-hover:-translate-y-1">
+                    ↗
+                  </span>
+                </a>
+              </p>
+            ) : (
+              <p className="font-inter-tight display-tight text-[32px] leading-[1.1] max-w-md">
+                Hiring, building something, or just want to say hi?{' '}
+                <a
+                  href={`mailto:${EMAIL}?subject=${encodeURIComponent("Hi Harbor — let's talk")}`}
+                  className="group inline-flex items-baseline gap-[6px] underline decoration-[#0A0A0A]/25 decoration-2 underline-offset-[6px] hover:text-[#3B5BD9] hover:decoration-[#3B5BD9] transition-colors duration-150"
+                >
+                  Let's talk
+                  <span aria-hidden className="inline-block transition-transform duration-200 group-hover:translate-x-1 group-hover:-translate-y-1">
+                    ↗
+                  </span>
+                </a>
+              </p>
+            )}
             <div>
-              <p className="mono-label mb-3" style={{ color: DARK.lav }}>
+              <p className={`${label} mb-3`} style={labelStyle}>
                 Contact
               </p>
-              <a href={`mailto:${EMAIL}`} className="font-inter-tight display-tight text-2xl md:text-4xl hover:text-[#9DB0FF] transition-colors duration-150 break-all">
+              <a
+                href={`mailto:${EMAIL}`}
+                className={`font-inter-tight display-tight text-2xl md:text-4xl transition-colors duration-150 break-all ${dark ? 'hover:text-[#9DB0FF]' : 'hover:text-[#3B5BD9]'}`}
+              >
                 {EMAIL}
               </a>
             </div>
-            <p className="mono-label" style={{ color: DARK.lav }}>
+            {/* English copyright convention: © year, then the name — Harbor first, legal first name in parentheses */}
+            <p className={label} style={labelStyle}>
               © 2026 Harbor (Jihyun) Kim
             </p>
           </div>
 
           <div>
-            <p className="mono-label mb-4" style={{ color: DARK.lav }}>
+            <p className={`${label} mb-4`} style={labelStyle}>
               Projects
             </p>
             <ul className="space-y-2">
               {FOOTER_PROJECTS.map((name) => (
                 <li key={name}>
-                  <a href={CASE_HREF[name] ?? '#/work'} className={LINK}>
+                  <a href={CASE_HREF[name] ?? '#work'} className={link}>
                     {name}
                   </a>
                 </li>
@@ -68,22 +95,22 @@ export function Contact() {
           </div>
 
           <div>
-            <p className="mono-label mb-4" style={{ color: DARK.lav }}>
+            <p className={`${label} mb-4`} style={labelStyle}>
               Elsewhere
             </p>
             <ul className="space-y-2">
               <li>
-                <a href={LINKEDIN_URL} target="_blank" rel="noopener noreferrer" className={LINK}>
+                <a href={LINKEDIN_URL} target="_blank" rel="noopener noreferrer" className={link}>
                   LinkedIn
                 </a>
               </li>
               <li>
-                <a href={INSTAGRAM_URL} target="_blank" rel="noopener noreferrer" className={LINK}>
+                <a href={INSTAGRAM_URL} target="_blank" rel="noopener noreferrer" className={link}>
                   Instagram
                 </a>
               </li>
               <li>
-                <a href={BOOK_CALL_URL} target="_blank" rel="noopener noreferrer" className={LINK}>
+                <a href={BOOK_CALL_URL} target="_blank" rel="noopener noreferrer" className={link}>
                   Book a call
                 </a>
               </li>
@@ -92,6 +119,7 @@ export function Contact() {
         </div>
       </div>
 
+      {/* keeps room for the dot ground under the text */}
       <div style={{ height: FIELD_H }} aria-hidden="true" />
     </footer>
   );

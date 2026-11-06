@@ -1,9 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ObjectsHero } from './components/sections/ObjectsHero';
 import { HomeDock } from './components/HomeDock';
-import { Work } from './components/sections/Work';
-import { Experience } from './components/sections/Experience';
-import { WhatIDo } from './components/sections/WhatIDo';
 import { Contact } from './components/sections/Contact';
 import { TrustBankCase } from './components/case/TrustBankCase';
 import { GameCoveCase } from './components/case/GameCoveCase';
@@ -12,34 +9,35 @@ import { CaseReveal } from './components/case/CaseReveal';
 import { ImageLightbox } from './components/case/ImageLightbox';
 import { CursorTrail } from './components/CursorTrail';
 import { AboutPage } from './components/about/AboutPage';
-import { WorkPage } from './components/work/WorkPage';
 
-const CASE_ROUTES = ['#/trust-bank', '#/gamecove', '#/utrada', '#/about', '#/work'];
+const CASE_ROUTES = ['#/trust-bank', '#/gamecove', '#/utrada', '#/about'];
 
 function readRoute() {
   if (typeof window === 'undefined') return '';
   return CASE_ROUTES.includes(window.location.hash) ? window.location.hash : '';
 }
 
-// Not rendered on the home page: FixedNav (replaced by the hero's own header + HomeDock, like agentcard.com),
-// DotIntro, IntroHero, Manifesto, ToolsDomains, RolesHero and MorphIntro.
-// The intro (flat type -> 3D -> hero) is played by ObjectsHero itself, on its own 3D headline,
-// so the last frame of the intro IS the hero headline.
-// Header menu: Work (#/work, all case studies) and About me (#/about).
+// Home page: the hero (intro -> 3D headline -> scroll into the desk scene) and the footer (Contact).
+// Taken off the home page at Harbor's request (files kept): the Experience coin section (sections/Work.tsx),
+// the Projects book (sections/Experience.tsx; the case studies are in the header's Work menu), and the
+// About me + Kim LLM section (sections/WhatIDo.tsx), which is now the first section of the About page.
+// Header menu: Work (a dropdown with the three case studies) and About me (#/about).
 export function App() {
   const [route, setRoute] = useState(readRoute);
 
   useEffect(() => {
+    // an old #/work link lands on the home page
+    if (window.location.hash === '#/work') window.location.hash = '';
     const onHash = () => setRoute(readRoute());
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
 
-  // closing a case study returns to the Projects section of the home page
+  // closing a case study returns to the top of the home page
   const closeCase = useCallback(() => {
-    window.location.hash = '#work';
+    window.location.hash = '';
     setRoute('');
-    requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById('work')?.scrollIntoView({ block: 'start' })));
+    requestAnimationFrame(() => window.scrollTo(0, 0));
   }, []);
 
   // closing About returns to the top of the home page
@@ -56,11 +54,6 @@ export function App() {
 
       {route === '#/about' ? (
         <AboutPage onClose={closeAbout} />
-      ) : route === '#/work' ? (
-        <>
-          <WorkPage />
-          <HomeDock />
-        </>
       ) : route ? (
         <div className="case-grid" key={route}>
           <ImageLightbox>
@@ -75,14 +68,11 @@ export function App() {
         </div>
       ) : (
         // home-min16: page content never goes below 16px (see index.css)
-        <div className="home-min16 relative w-full min-h-screen bg-[#050826] text-[#0A0A0A] font-inter-tight overflow-x-clip">
+        <div className="home-min16 relative w-full min-h-screen bg-white text-[#0A0A0A] font-inter-tight overflow-x-clip">
           <div className="fixed inset-0 dot-grid-bg pointer-events-none z-0" />
 
           <main className="relative z-10">
             <ObjectsHero />
-            <Work />
-            <Experience />
-            <WhatIDo />
             <Contact />
           </main>
 

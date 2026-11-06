@@ -1,24 +1,22 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { EMAIL } from '../data/content';
 import { CV_URL, CV_LABEL } from '../data/links';
+import { PROJECT_ICONS } from './case/projectIcons';
 
 /**
- * Site header (home, Work page): exactly 56px, flush with the top edge, never any background.
- * Menu: Work (#/work, all case studies) and About me (#/about). The Experience link was removed;
- * the Experience section stays on the home page.
- * Over dark/blue areas: white text with the headline's cobalt extrusion; over light ones: soft black.
+ * Site header (home page, About page): exactly 56px, flush with the top edge, never any background.
+ * Menu: "Work" with a down arrow opens a list of the three case studies (hover or click; Esc / click outside
+ * closes it), and "About me" (#/about).
+ * Colour: white over dark/blue areas, black over white/light ones. No blue extrusion under the wordmark,
+ * menu items or the CV button (removed at Harbor's request).
  */
-const ITEMS = [
-  { id: 'work', label: 'Work' },
-  { id: 'about', label: 'About me' },
+const WORK_LIST = [
+  { name: 'Trust Bank', sub: 'Rewards UX revamp', href: '#/trust-bank', icon: PROJECT_ICONS.trust },
+  { name: 'GameCove', sub: 'AI analytics dashboard', href: '#/gamecove', icon: PROJECT_ICONS.gamecove },
+  { name: 'UTrada', sub: 'Trading platform design system', href: '#/utrada', icon: PROJECT_ICONS.utrada },
 ];
-const COBALT = '#2238D0';
-const EXTRUDE = '#1A2BA6';
-const EXTRUDE_DEEP = '#121C78';
-const SOFT_BLACK = '#1C1C1E';
+const BLACK = '#000000';
 const HEADER_H = 56;
-const textExtrude = (steps: number) =>
-  Array.from({ length: steps }, (_, i) => `0 ${i + 1}px 0 ${i === steps - 1 ? EXTRUDE_DEEP : EXTRUDE}`).join(', ');
 
 const lum = (c: string) => {
   const m = c.match(/rgba?\(([^)]+)\)/);
@@ -46,21 +44,20 @@ const bgLum = (el: Element | null): number | null => {
 };
 
 const onAboutPage = () => window.location.hash === '#/about';
-const onWorkPage = () => window.location.hash === '#/work';
-const onSubPage = () => onAboutPage() || onWorkPage();
 
 export function HomeDock() {
-  const [active, setActive] = useState(() => (onAboutPage() ? 'about' : onWorkPage() ? 'work' : 'home'));
+  const [active, setActive] = useState(() => (onAboutPage() ? 'about' : 'home'));
   const [light, setLight] = useState(false);
   const [pressed, setPressed] = useState(false);
-  const [hoverCv, setHoverCv] = useState(false);
+  const [open, setOpen] = useState(false);
+  const workRef = useRef<HTMLDivElement>(null);
+  const closeTimer = useRef(0);
 
   useEffect(() => {
     let raf = 0;
     const check = () => {
       raf = 0;
       if (onAboutPage()) setActive('about');
-      else if (onWorkPage()) setActive('work');
       else {
         // on the home page "Work" lights up over the Projects section
         const mid = window.innerHeight * 0.5;
@@ -92,16 +89,44 @@ export function HomeDock() {
     };
   }, []);
 
+  // the Work list closes on Esc, a click outside it, scrolling, or a route change
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    const onDown = (e: PointerEvent) => {
+      if (!workRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const close = () => setOpen(false);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('pointerdown', onDown);
+    window.addEventListener('scroll', close, { passive: true });
+    window.addEventListener('hashchange', close);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('pointerdown', onDown);
+      window.removeEventListener('scroll', close);
+      window.removeEventListener('hashchange', close);
+    };
+  }, [open]);
+
+  const openNow = () => {
+    window.clearTimeout(closeTimer.current);
+    setOpen(true);
+  };
+  const closeSoon = () => {
+    window.clearTimeout(closeTimer.current);
+    closeTimer.current = window.setTimeout(() => setOpen(false), 160);
+  };
+
   const go = (id: string) => (e: React.MouseEvent) => {
     e.preventDefault();
-    if (id === 'about' || id === 'work') {
-      const hash = `#/${id}`;
-      if (window.location.hash === hash) window.scrollTo({ top: 0, behavior: 'smooth' });
-      else window.location.hash = hash;
+    if (id === 'about') {
+      if (onAboutPage()) window.scrollTo({ top: 0, behavior: 'smooth' });
+      else window.location.hash = '#/about';
       return;
     }
     // home
-    if (onSubPage()) {
+    if (onAboutPage()) {
       window.location.hash = '';
       requestAnimationFrame(() => window.scrollTo(0, 0));
     } else {
@@ -109,11 +134,15 @@ export function HomeDock() {
     }
   };
 
-  const fg = light ? SOFT_BLACK : '#FFFFFF';
-  const depth = pressed ? 0 : hoverCv ? 2 : 4;
-  const keyFace = light ? SOFT_BLACK : '#FFFFFF';
-  const keyText = light ? '#FFFFFF' : COBALT;
-  const keySide = light ? '#3A3A3D' : EXTRUDE;
+  const fg = light ? BLACK : '#FFFFFF';
+  // CV button: white on dark areas, black on light ones; flat (no coloured side)
+  const keyFace = light ? BLACK : '#FFFFFF';
+  const keyText = light ? '#FFFFFF' : BLACK;
+  const linkStyle = (on: boolean): React.CSSProperties => ({
+    color: fg,
+    opacity: on ? 1 : 0.6,
+  });
+  const workOn = active === 'work' || open;
 
   return (
     <header
@@ -126,32 +155,96 @@ export function HomeDock() {
           href="#home"
           onClick={go('home')}
           className="justify-self-start text-[26px] font-bold leading-none tracking-[-0.03em] transition-colors duration-300"
-          style={{ color: fg, textShadow: light ? 'none' : textExtrude(3) }}
+          style={{ color: fg }}
         >
           harbor
         </a>
 
         <nav aria-label="Primary" className="hidden items-center justify-center gap-[40px] md:flex">
-          {ITEMS.map((it) => {
-            const on = active === it.id;
-            return (
-              <a
-                key={it.id}
-                href={`#/${it.id}`}
-                onClick={go(it.id)}
-                aria-current={on ? 'true' : undefined}
-                className="whitespace-nowrap text-[16px] font-bold leading-none transition-all duration-200 hover:opacity-100"
-                style={{
-                  color: fg,
-                  opacity: on ? 1 : light ? 0.55 : 0.66,
-                  textShadow: on && !light ? textExtrude(2) : 'none',
-                  transform: on && !light ? 'translateY(-1px)' : 'none',
-                }}
+          {/* Work: arrow + list of the three case studies */}
+          <div ref={workRef} className="relative" onMouseEnter={openNow} onMouseLeave={closeSoon}>
+            <button
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded={open}
+              onClick={() => setOpen((v) => !v)}
+              className="flex items-center gap-[6px] whitespace-nowrap text-[16px] font-bold leading-none transition-all duration-200 hover:opacity-100"
+              style={linkStyle(workOn)}
+            >
+              Work
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 14 14"
+                fill="none"
+                aria-hidden
+                style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .25s cubic-bezier(.22,1,.36,1)' }}
               >
-                {it.label}
-              </a>
-            );
-          })}
+                <path d="M3 5.25L7 9.25L11 5.25" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+
+            {/* the list (padding-top bridges the gap so the hover doesn't drop on the way down) */}
+            <div
+              className="absolute left-1/2 top-full pt-[14px]"
+              style={{
+                transform: `translateX(-50%) translateY(${open ? 0 : -6}px)`,
+                opacity: open ? 1 : 0,
+                pointerEvents: open ? 'auto' : 'none',
+                transition: 'opacity .2s ease, transform .25s cubic-bezier(.22,1,.36,1)',
+              }}
+            >
+              <ul
+                role="menu"
+                aria-label="Work"
+                className="w-[380px] rounded-[16px] bg-white p-[8px]"
+                style={{ boxShadow: '0 0 0 1px rgba(0,0,0,0.06), 0 18px 40px rgba(0,0,0,0.18)' }}
+              >
+                {WORK_LIST.map((p, i) => (
+                  <li key={p.href} role="none">
+                    <a
+                      role="menuitem"
+                      href={p.href}
+                      onClick={() => setOpen(false)}
+                      tabIndex={open ? 0 : -1}
+                      className="group flex items-center gap-[14px] rounded-[10px] px-[10px] py-[10px] transition-colors duration-150 hover:bg-[#F2F2F2] focus-visible:bg-[#F2F2F2] focus-visible:outline-none"
+                      style={{
+                        opacity: open ? 1 : 0,
+                        transform: open ? 'none' : 'translateY(-4px)',
+                        transition: `opacity .25s ease ${open ? 0.04 * i : 0}s, transform .3s cubic-bezier(.22,1,.36,1) ${open ? 0.04 * i : 0}s, background-color .15s ease`,
+                      }}
+                    >
+                      <img src={p.icon} alt="" className="h-10 w-10 shrink-0 rounded-[6px] object-cover" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[16px] font-bold leading-[20px] text-black">{p.name}</span>
+                        <span className="block truncate text-[16px] leading-[20px] text-[#6B6B70]">{p.sub}</span>
+                      </span>
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        aria-hidden
+                        className="shrink-0 text-black opacity-0 transition-all duration-200 group-hover:translate-x-[2px] group-hover:opacity-100 group-focus-visible:opacity-100"
+                      >
+                        <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          <a
+            href="#/about"
+            onClick={go('about')}
+            aria-current={active === 'about' ? 'true' : undefined}
+            className="whitespace-nowrap text-[16px] font-bold leading-none transition-all duration-200 hover:opacity-100"
+            style={linkStyle(active === 'about')}
+          >
+            About me
+          </a>
         </nav>
 
         <div className="flex items-center gap-[22px] justify-self-end">
@@ -169,20 +262,15 @@ export function HomeDock() {
             href={CV_URL}
             target="_blank"
             rel="noopener noreferrer"
-            onMouseEnter={() => setHoverCv(true)}
-            onMouseLeave={() => {
-              setHoverCv(false);
-              setPressed(false);
-            }}
+            onMouseLeave={() => setPressed(false)}
             onMouseDown={() => setPressed(true)}
             onMouseUp={() => setPressed(false)}
-            className="inline-flex h-[36px] items-center rounded-[8px] px-[18px] text-[16px] font-bold"
+            className="inline-flex h-[36px] items-center rounded-[8px] px-[18px] text-[16px] font-bold hover:opacity-90"
             style={{
               background: keyFace,
               color: keyText,
-              transform: `translateY(${2 - depth}px)`,
-              boxShadow: `0 ${depth}px 0 ${keySide}, 0 ${depth + 6}px 14px rgba(5,8,38,${light ? 0.12 : 0.25})`,
-              transition: 'transform .12s ease, box-shadow .12s ease, background-color .3s ease, color .3s ease',
+              transform: pressed ? 'scale(0.96)' : 'none',
+              transition: 'transform .12s ease, opacity .2s ease, background-color .3s ease, color .3s ease',
             }}
           >
             {CV_LABEL}

@@ -8,12 +8,10 @@ import { useInView } from 'framer-motion';
 import { usePrefersReducedMotion } from '../../hooks/usePrefersReducedMotion';
 import { DotMatrix } from '../DotMatrix';
 import { HERO_OVERLAP_VH } from './ObjectsHero';
-import { DARK, SECTION_BG, extrude } from '../theme';
 
 /**
  * Experience section (file name kept for history).
- * Skills on the left, a portrait coin in the middle, companies on the right — on the hero's blue-dark tone,
- * with white type and the headline's cobalt extrusion on the hovered / current company.
+ * Skills on the left, a portrait coin in the middle, companies on the right.
  * The coin's first face is a looping video of Harbor at her laptop (square crop, framed on her face, no text on it);
  * scrolling flips it -> UTrada -> ETO Markets -> Pinetree; hovering a company flips to it too.
  * Under the coin: one line of what Harbor did there.
@@ -26,8 +24,8 @@ import { DARK, SECTION_BG, extrude } from '../theme';
 const PORTRAIT_VIDEO = 'https://raw.githubusercontent.com/Harbor-K/harbor-pf/main/assets/main-v2/desk-coin.mp4';
 const PORTRAIT_POSTER = 'https://raw.githubusercontent.com/Harbor-K/harbor-pf/main/assets/main-v2/desk-coin-poster.jpg';
 
-const HOVER = DARK.accent;
-const INK = '#FFFFFF';
+const HOVER = '#3B5BD9';
+const INK = '#0A0A0A';
 const PORTRAIT = -1; // face id for the portrait; 0..n are company indexes
 
 // scroll stages inside this section, shifted by the part spent under the hero
@@ -110,12 +108,13 @@ export function Work() {
     <section
       id="experience"
       ref={outerRef}
-      className="relative"
-      data-tone="dark"
+      className="relative bg-white"
       data-nav-offset-vh={Math.round(HERO_OVERLAP_VH * 0.7)}
-      style={{ minHeight: `${SCROLL_VH + 100}vh`, marginTop: `calc(-100svh - ${HERO_OVERLAP_VH}vh)`, background: DARK.navy }}
+      style={{ minHeight: `${SCROLL_VH + 100}vh`, marginTop: `calc(-100svh - ${HERO_OVERLAP_VH}vh)` }}
     >
-      <div className="sticky top-0 h-screen w-full flex items-center justify-center overflow-hidden" style={{ backgroundImage: SECTION_BG }}>
+      <div className="sticky top-0 h-screen w-full flex items-center justify-center overflow-hidden">
+        <div className="absolute inset-0 dot-grid-bg pointer-events-none" />
+
         <div className="relative w-full max-w-[1800px] mx-auto px-6 grid grid-cols-1 md:grid-cols-3 items-center h-full gap-6 overflow-y-auto md:overflow-visible py-10 md:py-0">
           {/* left column - skills */}
           <motion.div
@@ -136,7 +135,7 @@ export function Work() {
                 style={{
                   fontSize: 'clamp(18px, 2vw, 32px)',
                   marginRight: skillOffsets[i],
-                  color: hoveredSkill === s.name ? HOVER : 'rgba(255,255,255,0.86)',
+                  color: hoveredSkill === s.name ? HOVER : INK,
                 }}
               >
                 {s.name}
@@ -192,8 +191,7 @@ export function Work() {
                 {activeCompany && (
                   <motion.p
                     key={activeCompany.name}
-                    className="font-inter-tight display-tight text-base md:text-lg leading-snug"
-                    style={{ color: DARK.mute }}
+                    className="font-inter-tight display-tight text-base md:text-lg leading-snug text-[#0A0A0A]"
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -6 }}
@@ -214,35 +212,29 @@ export function Work() {
             viewport={{ once: true, amount: 0.3 }}
             variants={{ hidden: {}, show: { transition: { staggerChildren: 0.08 } } }}
           >
-            {COMPANIES.map((c, i) => {
-              const on = target === i;
-              return (
-                <motion.button
-                  key={c.name}
-                  type="button"
-                  onMouseEnter={() => setHoveredCompany(i)}
-                  onMouseLeave={() => setHoveredCompany(null)}
-                  variants={{ hidden: { opacity: 0, x: 24 }, show: { opacity: 1, x: 0 } }}
-                  className="font-inter-tight font-bold uppercase leading-[0.95] tracking-[-0.03em] text-center md:text-left transition-all duration-200"
-                  style={{
-                    fontSize: 'clamp(22px, 2.8vw, 48px)',
-                    marginLeft: companyOffsets[i],
-                    color: INK,
-                    opacity: on ? 1 : 0.62,
-                    textShadow: on ? extrude(4) : 'none',
-                    transform: on ? 'translateY(-2px)' : 'none',
-                  }}
+            {COMPANIES.map((c, i) => (
+              <motion.button
+                key={c.name}
+                type="button"
+                onMouseEnter={() => setHoveredCompany(i)}
+                onMouseLeave={() => setHoveredCompany(null)}
+                variants={{ hidden: { opacity: 0, x: 24 }, show: { opacity: 1, x: 0 } }}
+                className="font-inter-tight display-tight uppercase leading-[0.95] text-center md:text-left transition-colors duration-150"
+                style={{
+                  fontSize: 'clamp(22px, 2.8vw, 48px)',
+                  marginLeft: companyOffsets[i],
+                  color: target === i ? HOVER : INK,
+                }}
+              >
+                <span
+                  className="block normal-case text-[16px] leading-[20px] mb-[6px] text-[#8e8e95]"
+                  style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif', letterSpacing: 0 }}
                 >
-                  <span
-                    className="block normal-case font-normal text-[16px] leading-[20px] mb-[6px]"
-                    style={{ fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif', letterSpacing: 0, color: DARK.lav, textShadow: 'none' }}
-                  >
-                    {c.years}
-                  </span>
-                  {c.name}
-                </motion.button>
-              );
-            })}
+                  {c.years}
+                </span>
+                {c.name}
+              </motion.button>
+            ))}
           </motion.div>
         </div>
       </div>

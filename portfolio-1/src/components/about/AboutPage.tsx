@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { BOOK_CALL_URL } from '../../data/content';
 import { HomeDock } from '../HomeDock';
 import { Contact } from '../sections/Contact';
+import { WhatIDo } from '../sections/WhatIDo';
 
 const INK = '#0A0A0A';
 const HAIRLINE = 'rgba(10,10,10,0.12)';
@@ -56,13 +57,14 @@ function useFrame(run: () => void, dep: unknown) {
   }, [dep]);
 }
 
-// --- Section 1: statement with a collage that assembles around it ---
+// --- Section 2: statement with a collage that assembles around it ---
+// (section 1 is now the About me + Kim LLM section, moved here from the home page; WhatIDo.tsx)
+// (the "ABOUT ME" title was removed at Harbor's request; the header already shows "About me" as active)
 
 const STATEMENT = "I'm an AI-native product designer who owns the work end to end, from finding the problem to shipping the fix.";
 const WORDS = STATEMENT.split(' ');
 
-// With nothing above this section, starting at p = 0 would open on an empty page,
-// so a short load-in plays up to this point and scrolling covers the rest at the reference's speed.
+// A short load-in plays up to this point and scrolling covers the rest at the reference's speed.
 const INTRO_P = 0.28;
 const INTRO_MS = 1400;
 
@@ -178,10 +180,8 @@ function CollageSection() {
   );
 
   return (
-    <section ref={sectionRef} className="relative bg-white" style={{ height: '100vh' }}>
+    <section ref={sectionRef} className="relative bg-white" style={{ height: '100vh' }} aria-label="About me">
       <div className="sticky top-0 h-screen overflow-hidden bg-white">
-        <h1 className="font-inter-tight display-tight uppercase absolute z-10 left-[16px] md:left-[30px] top-[72px] md:top-[88px] text-3xl md:text-5xl">About me</h1>
-
         {compact ? (
           <div className="flex h-full flex-col items-center justify-center gap-[24px] px-[16px] pb-[16px] pt-[120px]">
             <div className="flex flex-wrap items-end justify-center gap-[10px]">
@@ -209,7 +209,7 @@ function CollageSection() {
   );
 }
 
-// --- Section 2: one photo grows, hands over to a second, captions change with it ---
+// --- Section 3: one photo grows, hands over to a second, captions change with it ---
 
 const WINDOW_COPY = {
   label: 'A window into my work',
@@ -482,6 +482,8 @@ export function AboutPage(_props: { onClose?: () => void }) {
   return (
     <div className="bg-white" style={{ color: INK }}>
       <HomeDock />
+      {/* section 1: About me + Kim LLM (moved here from the home page) */}
+      <WhatIDo />
       <CollageSection />
       <div style={{ height: 1, background: HAIRLINE, marginInline: 'max(20px, calc(50% - 736px))' }} aria-hidden />
       <WindowSection />
