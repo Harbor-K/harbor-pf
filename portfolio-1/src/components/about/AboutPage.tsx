@@ -4,8 +4,11 @@ import { HomeDock } from '../HomeDock';
 import { Contact } from '../sections/Contact';
 
 const INK = '#0A0A0A';
+const MUTED = '#6B6B70';
 const HAIRLINE = 'rgba(10,10,10,0.12)';
-const BASE = 'https://raw.githubusercontent.com/Harbor-K/harbor-pf/main/assets/';
+// Harbor's own photos from her Figma ("44기 김지현 4차 PF", About frames), hosted in Harbor-K/harbor-pf (pinned to the commit
+// that added them, so they never point at a cached older copy)
+const PHOTOS = 'https://raw.githubusercontent.com/Harbor-K/harbor-pf/6a56c6411f5a62474ed739e5fb9b361e0733428b/assets/about/v2/';
 
 // Layout numbers are in a 1512px-wide canvas, scaled down below 1512 like the reference (creative.inc).
 const CANVAS_W = 1512;
@@ -62,33 +65,42 @@ function useFrame(run: () => void, dep: unknown) {
 
 const STATEMENT = "I'm an AI-native product designer who owns the work end to end, from finding the problem to shipping the fix.";
 const WORDS = STATEMENT.split(' ');
+// Harbor's note (Figma, in red): she loves travelling and drawing the places she goes. PLACEHOLDER wording for her review.
+const STATEMENT_AFTER = 'Off the clock, I travel and sketch the places I visit.';
 
 // With nothing above this section, starting at p = 0 would open on an empty page,
 // so a short load-in plays up to this point and scrolling covers the rest at the reference's speed.
 const INTRO_P = 0.28;
 const INTRO_MS = 1400;
 
+/**
+ * The collage: Harbor's travel photos and on-the-spot sketches (her Figma frame), balanced around the statement.
+ * Sizes come in three steps (large ~240, medium ~200, small ~152 on the long side) instead of nine different sizes,
+ * so the collage reads as one calm set; the left and right sides carry about the same weight, the cafe photo
+ * crowns the statement and the sketch held up on site sits right under the line about sketching (they belong together).
+ * Positions are in the 1512 canvas; `top` is measured against COLLAGE_CENTER (the statement's centre).
+ */
 const COLLAGE_CENTER = 1749;
 const COLLAGE_REACH = 425;
+const C = COLLAGE_CENTER;
 const COLLAGE = [
-  { src: 'trust-bank/workshop-2.jpg', w: 129, h: 96, left: 532, top: 1465, pos: '40% 50%', strip: 0 },
-  { src: 'about/drawing-9.jpg', w: 62, h: 52, left: 99, top: 1737, pos: '50% 50%', strip: 1 },
-  { src: 'about/drawing-3.jpg', w: 72, h: 62, left: 570, top: 1914, pos: '50% 50%', strip: 1 },
-  { src: 'about/drawing-8.jpg', w: 97, h: 103, left: 1149, top: 1375, pos: '50% 50%', strip: 0 },
-  { src: 'about/film-places.jpg', w: 72, h: 52, left: 1472, top: 1324, pos: '50% 50%', strip: 0 },
-  { src: 'portrait/harbor-portrait-bw.webp', w: 153, h: 173, left: 1353, top: 1515, pos: '50% 30%', strip: 1 },
-  { src: 'trust-bank/takeaway.jpg', w: 141, h: 128, left: 629, top: 1365, pos: '58% 40%', strip: 0 },
-  { src: 'about/film-fineart.jpg', w: 110, h: 140, left: -23, top: 1514, pos: '47% 50%', strip: 1 },
-  { src: 'main-v2/desk-coin-poster.jpg', w: 125, h: 114, left: 195, top: 1914, pos: '50% 50%', strip: 1 },
-  { src: 'trust-bank/define-photo.jpg', w: 183, h: 159, left: 1250, top: 1955, pos: '50% 50%', strip: 1 },
-  { src: 'about/film-fintech.jpg', w: 108, h: 130, left: 1056, top: 2030, pos: '50% 40%', strip: 1 },
+  { src: 'cafe-laptop.jpg', w: 270, h: 180, left: 621, top: C - 340, pos: '50% 45%', strip: 0, alt: 'Harbor working on her laptop in a cafe' },
+  { src: 'trafalgar-fountain.jpg', w: 150, h: 200, left: 140, top: C - 300, pos: '50% 60%', strip: 0, alt: 'Harbor at the Trafalgar Square fountains at dusk' },
+  { src: 'seven-sisters.jpg', w: 152, h: 114, left: 1040, top: C - 340, pos: '50% 50%', strip: 0, alt: 'Harbor on the cliffs by the sea' },
+  { src: 'trafalgar-night.jpg', w: 114, h: 152, left: 1290, top: C - 390, pos: '50% 50%', strip: 0, alt: "Harbor under Nelson's Column at night" },
+  { src: 'sydney-harbour.jpg', w: 200, h: 150, left: 1160, top: C - 150, pos: '50% 50%', strip: 0, alt: 'Harbor by Sydney Harbour with the Opera House behind' },
+  { src: 'afternoon-tea.jpg', w: 180, h: 240, left: 260, top: C + 10, pos: '50% 40%', strip: 1, alt: 'Harbor at afternoon tea' },
+  { src: 'garden.jpg', w: 114, h: 152, left: 100, top: C + 150, pos: '50% 60%', strip: 1, alt: 'Harbor in a flower garden' },
+  { src: 'sketch-on-site.jpg', w: 200, h: 150, left: 656, top: C + 140, pos: '50% 50%', strip: 1, alt: 'A sketch of a tree, held up where it was drawn' },
+  { src: 'red-panda-drawing.jpg', w: 220, h: 220, left: 1100, top: C + 100, pos: '50% 50%', strip: 1, alt: "Harbor's drawing of two red pandas cuddling" },
 ];
 
 function CollageSection() {
   const compact = useCompact();
   const sectionRef = useRef<HTMLElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
-  const statementRef = useRef<HTMLParagraphElement>(null);
+  const statementRef = useRef<HTMLDivElement>(null);
+  const afterRef = useRef<HTMLParagraphElement>(null);
   const wordRefs = useRef<(HTMLSpanElement | null)[]>([]);
   const photoRefs = useRef<(HTMLImageElement | null)[]>([]);
   const startedAt = useRef(performance.now());
@@ -110,6 +122,8 @@ function CollageSection() {
     wordRefs.current.forEach((w, i) => {
       if (w) w.style.opacity = String(0.4 + 0.6 * clamp(reveal * WORDS.length - i, 0, 1));
     });
+    // the travel line lights up right after the statement has
+    if (afterRef.current) afterRef.current.style.opacity = String(0.4 + 0.6 * clamp((reveal - 0.85) / 0.15, 0, 1));
 
     const canvas = canvasRef.current;
     let centerY = 0;
@@ -125,7 +139,7 @@ function CollageSection() {
 
     photoRefs.current.forEach((img, i) => {
       if (!img) return;
-      const e = easeOutCubic(clamp((p - (0.1 + 0.06 * i)) / 0.28, 0, 1));
+      const e = easeOutCubic(clamp((p - (0.1 + 0.05 * i)) / 0.28, 0, 1));
       img.style.opacity = String(e);
       img.style.transform = `translateY(${(1 - e) * 60}px) scale(${0.92 + 0.08 * e})`;
       if (!compact) img.style.top = `${centerY + (COLLAGE[i].top - COLLAGE_CENTER) * squeeze}px`;
@@ -158,6 +172,11 @@ function CollageSection() {
       </span>{' '}
     </React.Fragment>
   ));
+  const afterLine = (cls: string) => (
+    <p ref={afterRef} className={`mt-[20px] leading-[1.4] ${cls}`} style={{ color: MUTED, opacity: 0.4 }}>
+      {STATEMENT_AFTER}
+    </p>
+  );
 
   const photo = (ph: (typeof COLLAGE)[number], i: number, scale: number, absolute: boolean) => (
     <img
@@ -165,8 +184,8 @@ function CollageSection() {
       ref={(el) => {
         photoRefs.current[i] = el;
       }}
-      src={`${BASE}${ph.src}`}
-      alt=""
+      src={`${PHOTOS}${ph.src}`}
+      alt={ph.alt}
       decoding="async"
       className="block rounded-[8px] object-cover will-change-transform"
       style={{
@@ -185,23 +204,23 @@ function CollageSection() {
         {compact ? (
           <div className="flex h-full flex-col items-center justify-center gap-[24px] px-[16px] pb-[16px] pt-[120px]">
             <div className="flex flex-wrap items-end justify-center gap-[10px]">
-              {COLLAGE.map((ph, i) => (ph.strip === 0 ? photo(ph, i, 0.62, false) : null))}
+              {COLLAGE.map((ph, i) => (ph.strip === 0 ? photo(ph, i, 0.5, false) : null))}
             </div>
-            <p className="font-inter-tight display-tight max-w-[520px] text-center text-[28px] leading-[1.15]">{statementText}</p>
+            <div className="max-w-[520px] text-center">
+              <p className="font-inter-tight display-tight text-[28px] leading-[1.15]">{statementText}</p>
+              {afterLine('text-[18px]')}
+            </div>
             <div className="flex flex-wrap items-start justify-center gap-[10px]">
-              {COLLAGE.map((ph, i) => (ph.strip === 1 ? photo(ph, i, 0.62, false) : null))}
+              {COLLAGE.map((ph, i) => (ph.strip === 1 ? photo(ph, i, 0.5, false) : null))}
             </div>
           </div>
         ) : (
           <div ref={canvasRef} className="absolute top-0" style={{ width: CANVAS_W, transformOrigin: '0 0' }}>
             {COLLAGE.map((ph, i) => photo(ph, i, 1, true))}
-            <p
-              ref={statementRef}
-              className="font-inter-tight display-tight absolute z-[1] text-center text-[32px] leading-[1.15]"
-              style={{ left: 496, width: 520, transform: 'translateY(-50%)' }}
-            >
-              {statementText}
-            </p>
+            <div ref={statementRef} className="absolute z-[1] text-center" style={{ left: 496, width: 520, transform: 'translateY(-50%)' }}>
+              <p className="font-inter-tight display-tight text-[32px] leading-[1.15]">{statementText}</p>
+              {afterLine('text-[20px]')}
+            </div>
           </div>
         )}
       </div>
@@ -211,9 +230,11 @@ function CollageSection() {
 
 // --- Section 2: one photo grows, hands over to a second, captions change with it ---
 
+// Captions are PLACEHOLDER wording for Harbor's review. The first note follows her Figma note (in red):
+// she loved art, but wanted to make things more people can use, which is what brought her to UX.
 const WINDOW_COPY = {
   label: 'A window into my work',
-  first: { credit: 'Where I started', note: 'I started in Fine Art, drawing what I saw.' },
+  first: { credit: 'Where I started', note: 'I started in Fine Art, painting what I saw. I loved it, but I wanted to make things everyone can use. That brought me to UX.' },
   second: { credit: 'What I do now', note: 'Now I design fintech products, end to end. I test everything with real people.' },
   statement: "I've spent 3+ years on fintech and e-learning: trading platforms, digital banking, crypto wallets and data dashboards.",
 };
@@ -227,7 +248,7 @@ const SCENE_LEFT = 354;
 const SCENE_CX = 402;
 const MAX_IMAGE_H = 1034;
 const COMPACT_SCENE_TOP = 40;
-const COMPACT_NOTES_H = 140;
+const COMPACT_NOTES_H = 160;
 
 function place(el: HTMLElement | null, left: number, top: number, width: number, height: number) {
   if (!el) return;
@@ -365,23 +386,26 @@ function WindowSection() {
               {WINDOW_COPY.label}
             </p>
             <div ref={sceneRef} className="absolute">
+              {/* what she does now: the research wall (its frame is 0.69 wide, so the crop keeps her face and the notes) */}
               <div ref={tallRef} className="absolute overflow-hidden rounded-[8px]" style={{ opacity: 0 }}>
                 <img
                   ref={tallImgRef}
-                  src={`${BASE}main-v2/about-photo.webp`}
-                  alt="Harbor Kim sorting sticky notes on a research wall"
+                  src={`${PHOTOS}sticky-wall.jpg`}
+                  alt="Harbor sorting sticky notes on a research wall"
                   decoding="async"
                   className="absolute inset-0 h-full w-full object-cover will-change-transform"
-                  style={{ objectPosition: '40% 40%' }}
+                  style={{ objectPosition: '30% 45%' }}
                 />
               </div>
+              {/* where she started: her Fine Art show (the photo has the frame's own 0.69 shape, so nothing is cut off) */}
               <div ref={sideRef} className="absolute overflow-hidden rounded-[8px]">
                 <img
                   ref={sideImgRef}
-                  src={`${BASE}about/drawing-1.jpg`}
-                  alt="Harbor's pencil drawing of a winged statue, held up outdoors"
+                  src={`${PHOTOS}fineart-exhibition.jpg`}
+                  alt="Harbor at her Fine Art exhibition, in front of her watercolour paintings"
                   decoding="async"
                   className="absolute inset-0 h-full w-full object-cover will-change-transform"
+                  style={{ objectPosition: '50% 35%' }}
                 />
               </div>
               {caption(credit1Ref, WINDOW_COPY.first.credit)}
@@ -447,29 +471,45 @@ function loadCal() {
   })(window, 'https://app.cal.com/embed/embed.js', 'init');
 }
 
+/**
+ * The booking calendar, always on the page (the "Open the booking page" link was removed at Harbor's request).
+ * Cal.com's inline embed draws it; if the embed has not put its calendar in within a few seconds (script blocked,
+ * slow network, coming back to this page), the same booking page is shown in a plain frame instead, so the
+ * calendar is always there.
+ */
 function CalEmbed() {
+  const boxRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    loadCal();
-    const Cal = (window as any).Cal;
-    Cal('init', '30min', { origin: 'https://cal.com' });
-    Cal.ns['30min']('inline', {
-      elementOrSelector: '#harbor-cal-inline',
-      config: { layout: 'month_view', theme: 'light' },
-      calLink: BOOK_CALL_URL.replace('https://cal.com/', ''),
-    });
-    Cal.ns['30min']('ui', { hideEventTypeDetails: false, layout: 'month_view', theme: 'light' });
+    const box = boxRef.current;
+    try {
+      loadCal();
+      const Cal = (window as any).Cal;
+      if (!Cal.ns?.['30min']) Cal('init', '30min', { origin: 'https://cal.com' });
+      Cal.ns['30min']('inline', {
+        elementOrSelector: '#harbor-cal-inline',
+        config: { layout: 'month_view', theme: 'light' },
+        calLink: BOOK_CALL_URL.replace('https://cal.com/', ''),
+      });
+      Cal.ns['30min']('ui', { hideEventTypeDetails: false, layout: 'month_view', theme: 'light' });
+    } catch {
+      /* the fallback below takes over */
+    }
+    const t = window.setTimeout(() => {
+      if (!box || box.querySelector('iframe')) return;
+      const f = document.createElement('iframe');
+      f.src = `${BOOK_CALL_URL}?embed=true&layout=month_view&theme=light`;
+      f.title = 'Book a 30-minute call with Harbor';
+      f.style.cssText = 'display:block;width:100%;height:640px;border:0;';
+      box.appendChild(f);
+    }, 5000);
+    return () => window.clearTimeout(t);
   }, []);
 
   return (
     <div className="mx-auto max-w-[1000px] px-6">
       <h2 className="text-[26px] md:text-[30px] leading-[1.2] font-bold">Want to talk? Book a call with me</h2>
       <p className="mt-[16px] text-[18px] leading-[1.6] text-[#333]">Pick a time for a 30-minute chat.</p>
-      <div id="harbor-cal-inline" className="mt-[30px] w-full overflow-hidden rounded-[20px]" style={{ minHeight: 480 }} />
-      <div className="mt-[20px] flex justify-end">
-        <a href={BOOK_CALL_URL} target="_blank" rel="noopener noreferrer" className="inline-block text-[16px] underline underline-offset-4">
-          Open the booking page
-        </a>
-      </div>
+      <div ref={boxRef} id="harbor-cal-inline" className="mt-[30px] w-full overflow-hidden rounded-[20px]" style={{ minHeight: 480 }} />
     </div>
   );
 }

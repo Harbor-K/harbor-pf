@@ -8,6 +8,7 @@ import {
   slotDist, type DeskSlot,
 } from './deskScene';
 import { CUP_URL } from './cupImage';
+import { DESK_DECOR, type Decorator } from './deskDecor';
 
 /**
  * Home hero, rebuilt from agentcard.com's main section (same scene and motion, Harbor's content and colours).
@@ -27,8 +28,12 @@ import { CUP_URL } from './cupImage';
  *     Click / key / wheel skips to the hand-off. prefers-reduced-motion: no intro.
  *
  * Objects: photoreal cut-outs of a UX designer's kit, generated on a green screen and keyed out in the browser,
- * saturated and then dimmed (blue multiply + navy fog) like agentcard's objects. The cup is Harbor's own
- * hand-painted ceramic cup (her photo, cut out onto a green screen in ./cupImage.ts).
+ * saturated and then dimmed (blue multiply + navy fog) like agentcard's objects.
+ *  - The cup is Harbor's own hand-painted ceramic cup (./cupImage.ts).
+ *  - The yellow sticky pad carries a real HMW question and the clipboard carries low-fi wireframe sketches; both
+ *    are drawn onto the keyed photos in the browser (./deskDecor.ts).
+ *  - Desk objects whose photo faces the other way from the desk's perspective are mirrored before the writing
+ *    goes on, so the writing still reads the right way.
  *
  * Scroll — "the desk", laid out like Harbor's ClassPass reference (gift-card hero): same frame, same copy spot
  * and amount (a two-line headline + one rounded button, top-left), same desk shape. Tuning lives in ./deskScene.ts.
@@ -36,7 +41,7 @@ import { CUP_URL } from './cupImage';
  *  2. The background flattens into the plain blue wall and the desk slides up into place.
  *  3. Six objects are set down on the desk one at a time, like a hand placing them: carried to just above
  *     their place, lowered straight down to a soft touch, a hair of squash, a small rock back to level, rest.
- *     Photos shot facing the other way are mirrored so they follow the desk's perspective. The rest drift away.
+ *     The rest drift away.
  *  4. The copy fades in (PLACEHOLDER copy for now). Then the page moves on.
  *  Hover a landed object: it lifts a little and a short line about it shows next to the cursor (tooltip).
  *
@@ -137,11 +142,15 @@ const outCubic = (t: number) => 1 - (1 - t) ** 3;
 const inOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 const backOut = (t: number, s = 1.6) => (t <= 0 ? 0 : t >= 1 ? 1 : 1 + (s + 1) * (t - 1) ** 3 + s * (t - 1) ** 2);
 
-function loadCutout(url: string): Promise<{ canvas: HTMLCanvasElement; aspect: number } | null> {
+/**
+ * Load a green-screen photo and key it out. Optionally mirror it, and let a decorator draw on it
+ * (after mirroring, so writing reads the right way), then crop to the object.
+ */
+function loadCutout(url: string, decorate?: Decorator, flip = false): Promise<{ canvas: HTMLCanvasElement; aspect: number } | null> {
   return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.onload = () => {
+    img.onload = async () => {
       try {
         const W = img.naturalWidth;
         const H = img.naturalHeight;
@@ -184,6 +193,28 @@ function loadCutout(url: string): Promise<{ canvas: HTMLCanvasElement; aspect: n
         }
         sx.putImageData(im, 0, 0);
         if (maxX <= minX || maxY <= minY) return resolve(null);
+        let base = src;
+        if (flip) {
+          const f = document.createElement('canvas');
+          f.width = W;
+          f.height = H;
+          const fx = f.getContext('2d', { willReadFrequently: true })!;
+          fx.translate(W, 0);
+          fx.scale(-1, 1);
+          fx.drawImage(src, 0, 0);
+          fx.setTransform(1, 0, 0, 1, 0, 0);
+          base = f;
+          const a = minX;
+          minX = W - 1 - maxX;
+          maxX = W - 1 - a;
+        }
+        if (decorate) {
+          try {
+            await decorate(base.getContext('2d', { willReadFrequently: true })!, flip);
+          } catch {
+            /* keep the plain photo */
+          }
+        }
         const pad = 6;
         minX = Math.max(0, minX - pad);
         minY = Math.max(0, minY - pad);
@@ -195,7 +226,7 @@ function loadCutout(url: string): Promise<{ canvas: HTMLCanvasElement; aspect: n
         const out = document.createElement('canvas');
         out.width = Math.round(cw * k);
         out.height = Math.round(ch * k);
-        out.getContext('2d')!.drawImage(src, minX, minY, cw, ch, 0, 0, out.width, out.height);
+        out.getContext('2d')!.drawImage(base, minX, minY, cw, ch, 0, 0, out.width, out.height);
         resolve({ canvas: out, aspect: cw / ch });
       } catch {
         resolve(null);
@@ -394,11 +425,13 @@ export function ObjectsHero() {
     const planeGeo = new THREE.PlaneGeometry(1, 1);
     const textures: THREE.Texture[] = [];
     const mats: THREE.MeshBasicMaterial[] = [];
-    const loaded = new Map<Kind, Promise<{ mat: THREE.MeshBasicMaterial; aspect: number } | null>>();
-    const getKind = (kind: Kind) => {
-      let p = loaded.get(kind);
+    const loaded = new Map<string, Promise<{ mat: THREE.MeshBasicMaterial; aspect: number } | null>>();
+    /** one material per kind (and per mirrored version, for desk objects that are mirrored) */
+    const getKind = (kind: Kind, flip = false) => {
+      const key = flip ? `${kind}|m` : kind;
+      let p = loaded.get(key);
       if (!p) {
-        p = loadCutout(ASSETS[kind].url).then((res) => {
+        p = loadCutout(ASSETS[kind].url, DESK_DECOR[kind], flip).then((res) => {
           if (!res || disposed) return null;
           const t = new THREE.CanvasTexture(res.canvas);
           t.colorSpace = THREE.SRGBColorSpace;
@@ -408,7 +441,7 @@ export function ObjectsHero() {
           mats.push(mat);
           return { mat, aspect: res.aspect };
         });
-        loaded.set(kind, p);
+        loaded.set(key, p);
       }
       return p;
     };
@@ -640,8 +673,6 @@ export function ObjectsHero() {
           const s = p.slot;
           const flat = s.flat ?? 1;
           const lying = s.flat !== undefined;
-          // mirrored photos turn the same way as the desk (its right side is farther away)
-          const mx = s.mirror ? -1 : 1;
           // its own turn, one after another (back row first)
           const g = clamp01((land - p.delay * STAGGER.spread) / STAGGER.span);
           const m = placeMotion(g);
@@ -661,11 +692,11 @@ export function ObjectsHero() {
           if (p.plane) {
             p.plane.rotation.z = s.tilt * m.carry;
             if (lying) {
-              p.plane.scale.set(p.pw * mx, p.ph, 1);
+              p.plane.scale.set(p.pw, p.ph, 1);
               p.plane.position.y = 0;
             } else {
               // a hair of squash on contact, keeping the bottom on the desk
-              p.plane.scale.set(p.pw * mx * m.squashX, p.ph * m.squashY, 1);
+              p.plane.scale.set(p.pw * m.squashX, p.ph * m.squashY, 1);
               p.plane.position.y = -(1 - m.squashY) * p.ph * 0.5;
             }
           }
@@ -822,20 +853,23 @@ export function ObjectsHero() {
           halfH: size * 0.4, pw: size, ph: size, aspect: 1, vis: 1, f: 1, land: 0, rock: 0, hover: false, hv: 0,
           hidden: false, phase, roll, speed: 0.12 + 0.15 * Q(), slot: null,
         };
-        getKind(kind).then((res) => {
-          if (!res || disposed) return;
-          const plane = new THREE.Mesh(planeGeo, res.mat);
-          const w = res.aspect >= 1 ? size : size * res.aspect;
-          const h = res.aspect >= 1 ? size / res.aspect : size;
-          plane.scale.set(w, h, 1);
-          piece.plane = plane;
-          piece.pw = w;
-          piece.ph = h;
-          piece.halfH = h / 2;
-          piece.aspect = res.aspect;
-          flatG.add(plane);
-          if (reduce.matches || !raf) frame(true);
-        });
+        // after the desk slots are handed out (same tick): mirrored desk objects get the mirrored picture
+        Promise.resolve()
+          .then(() => getKind(kind, !!piece.slot?.mirror))
+          .then((res) => {
+            if (!res || disposed) return;
+            const plane = new THREE.Mesh(planeGeo, res.mat);
+            const w = res.aspect >= 1 ? size : size * res.aspect;
+            const h = res.aspect >= 1 ? size / res.aspect : size;
+            plane.scale.set(w, h, 1);
+            piece.plane = plane;
+            piece.pw = w;
+            piece.ph = h;
+            piece.halfH = h / 2;
+            piece.aspect = res.aspect;
+            flatG.add(plane);
+            if (reduce.matches || !raf) frame(true);
+          });
         return piece;
       };
 
