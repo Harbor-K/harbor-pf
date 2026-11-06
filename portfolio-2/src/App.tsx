@@ -21,6 +21,8 @@ const QUOTES = ['“I started in Fine Art, drawing what I saw.”']
 const QUOTE_MS = 5000
 
 export const TB = 'https://raw.githubusercontent.com/Harbor-K/harbor-pf/main/assets/trust-bank/'
+// GameCove 15s ad (same file as the GameCove case-study hero); plays muted on loop here.
+const GC = 'https://raw.githubusercontent.com/Harbor-K/landing_page/main/gamecove/assets/v4/'
 
 type Project = {
   title: string; sub: string; href?: string
@@ -39,7 +41,7 @@ const PROJECTS: Project[] = [
     title: 'GameCove', sub: 'An AI game-analytics dashboard.', href: '#/gamecove',
     rows: [['Case study', 'Data dashboard'], ['Team project', 'AI game analytics']],
     note: ['Dashboard designed', 'GameCove'],
-    img: IMG + 'gamecove.webp', alt: 'GameCove overview dashboard',
+    video: GC + 'hero-ad.mp4', poster: GC + 'hero-ad-poster.jpg', alt: 'GameCove ad: Overview, AI mapping, Retention and the AI agent', ratio: '2 / 1',
   },
   {
     title: 'UTrada', sub: 'Product design for a trading platform.',
@@ -358,7 +360,7 @@ function ProjectBlock({ p }: { p: Project }) {
         <a className="proj-media" href={href} aria-label={`View ${p.title}`}>
           <div className="shot" style={p.ratio ? { aspectRatio: p.ratio } : undefined}>
             {p.video
-              ? <video src={p.video} poster={p.poster} autoPlay muted loop playsInline preload="metadata" />
+              ? <video src={p.video} poster={p.poster} autoPlay muted loop playsInline preload="metadata" aria-label={p.alt} />
               : <img src={p.img} alt={p.alt ?? ''} loading="lazy" />}
             <span className="view">View project →</span>
           </div>

@@ -12,11 +12,14 @@ import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
  * INTRO (after Jitter's "Morph: Shape To Text", in the order of Harbor's reference clip), played on this same
  * 3D headline so the last frame of the intro is exactly the hero (same letters, font, size, place):
  *  1. Flat: the headline with almost no depth, pale and glowing, on a navy/purple field with light rings.
+ *     A big "harbor" wordmark sits just above it.
  *  2. The field drops to black; the extrusion grows long (pink at the letters, periwinkle at the back) and the
- *     type tips back a little so the extrusion runs down toward a vanishing point.
+ *     type tips back a little so the extrusion runs down toward a vanishing point. At the same time the "harbor"
+ *     wordmark shrinks and flies up to the header's top-left corner, landing exactly on the header's own wordmark
+ *     (which then takes over).
  *  3. Hand-off: depth, tilt and colours ease back to the hero's own values while the cobalt background fades in,
- *     then the objects pop in and the mouse swing fades back. Click / key / wheel skips to the hand-off.
- *     The site header stays hidden until the hand-off. prefers-reduced-motion: no intro.
+ *     the rest of the header fades in, then the objects pop in and the mouse swing fades back.
+ *     Click / key / wheel skips to the hand-off. prefers-reduced-motion: no intro.
  *
  * Objects: photoreal cut-outs of a UX designer's kit, generated on a green screen and keyed out in the browser,
  * saturated and then dimmed (blue multiply + navy fog) like agentcard's objects.
@@ -69,6 +72,12 @@ const I_HAND = 1.0;
 const I_START_GROW = I_FLAT + 0.2;
 const I_START_HAND = I_START_GROW + I_GROW + I_HOLD;
 const I_END = I_START_HAND + I_HAND;
+// the "harbor" wordmark above the headline: size at the start (x the header's 26px) and gap to the headline
+const LOGO_SCALE = 2.4;
+const LOGO_SCALE_MOBILE = 1.7;
+const LOGO_GAP = 26;
+// same 3D type as the header wordmark (HomeDock textExtrude(3))
+const LOGO_EXTRUDE = '0 1px 0 #1A2BA6, 0 2px 0 #1A2BA6, 0 3px 0 #121C78';
 
 const SATURATION = 1.55;
 const CONTRAST = 1.12;
@@ -205,6 +214,7 @@ export function ObjectsHero() {
   const introBgRef = useRef<HTMLDivElement>(null);
   const ring1Ref = useRef<HTMLDivElement>(null);
   const ring2Ref = useRef<HTMLDivElement>(null);
+  const flyRef = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
@@ -217,15 +227,27 @@ export function ObjectsHero() {
     const iBg = introBgRef.current;
     const r1 = ring1Ref.current;
     const r2 = ring2Ref.current;
-    if (!canvas || !host || !outer || !bg || !video || !iBlack || !iBg || !r1 || !r2) return;
+    const fly = flyRef.current;
+    if (!canvas || !host || !outer || !bg || !video || !iBlack || !iBg || !r1 || !r2 || !fly) return;
 
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
     const html = document.documentElement;
-    const header = () => document.querySelector('[data-home-header]') as HTMLElement | null;
+    // HomeDock: <header data-home-header><div grid>[wordmark, nav, right]</div></header>
+    const headerParts = () => {
+      const h = document.querySelector('[data-home-header]') as HTMLElement | null;
+      const grid = h?.firstElementChild as HTMLElement | null;
+      return {
+        h,
+        logo: (grid?.children[0] as HTMLElement | undefined) ?? null,
+        rest: [grid?.children[1], grid?.children[2]].filter(Boolean) as HTMLElement[],
+      };
+    };
 
     // ---------- intro state ----------
     let introOn = !reduce.matches;
     let introStart = 0; // set when the font has loaded and the headline exists
+    let logoLanded = false;
+    let logoFrom: { x: number; y: number } | null = null; // start centre of the flying wordmark
     const iv = { depth: 1, tilt: 0, flat: 0, scale: 1, obj: 1 };
     const prevOverflow = html.style.overflow;
     const hideIntroLayers = () => {
@@ -233,14 +255,23 @@ export function ObjectsHero() {
       iBg.style.display = 'none';
       r1.style.display = 'none';
       r2.style.display = 'none';
+      fly.style.display = 'none';
+    };
+    const landLogo = () => {
+      if (logoLanded) return;
+      logoLanded = true;
+      const { logo } = headerParts();
+      if (logo) logo.style.visibility = '';
+      fly.style.display = 'none';
     };
     const showHeader = () => {
-      const h = header();
-      if (h) {
-        h.style.transition = 'opacity .6s ease';
-        h.style.opacity = '1';
-        h.style.pointerEvents = '';
-      }
+      landLogo();
+      const { h, rest } = headerParts();
+      if (h) h.style.pointerEvents = '';
+      rest.forEach((el) => {
+        el.style.transition = 'opacity .7s ease';
+        el.style.opacity = '1';
+      });
     };
     if (introOn) {
       html.style.overflow = 'hidden';
@@ -248,11 +279,11 @@ export function ObjectsHero() {
       iv.depth = 0.02;
       iv.flat = 1;
       iv.obj = 0;
-      const h = header();
-      if (h) {
-        h.style.opacity = '0';
-        h.style.pointerEvents = 'none';
-      }
+      // the header stays in place; its wordmark waits for the flying one, the rest is hidden until the hand-off
+      const { h, logo, rest } = headerParts();
+      if (h) h.style.pointerEvents = 'none';
+      if (logo) logo.style.visibility = 'hidden';
+      rest.forEach((el) => (el.style.opacity = '0'));
     } else hideIntroLayers();
 
     let renderer: THREE.WebGLRenderer;
@@ -401,6 +432,54 @@ export function ObjectsHero() {
       if (!disposed) renderer.render(scene, camera);
     }
 
+    const tmpV = new THREE.Vector3();
+    const tBox = new THREE.Box3();
+    const tCenter = new THREE.Vector3();
+    const corner = new THREE.Vector3();
+    const textLocalBox = new THREE.Box3();
+
+    /** top edge of the headline on screen (px) */
+    function headlineTop() {
+      world.updateMatrixWorld(true);
+      camera.updateMatrixWorld(true);
+      tBox.copy(textLocalBox).applyMatrix4(textGroup.matrixWorld);
+      let top = Infinity;
+      for (let i = 0; i < 8; i++) {
+        corner.set(i & 1 ? tBox.max.x : tBox.min.x, i & 2 ? tBox.max.y : tBox.min.y, i & 4 ? tBox.max.z : tBox.min.z).project(camera);
+        top = Math.min(top, ((1 - corner.y) / 2) * viewH);
+      }
+      return top;
+    }
+
+    /**
+     * The "harbor" wordmark: sits big just above the flat headline, then (while the headline grows into 3D)
+     * shrinks and flies to the header wordmark's exact spot. Placed at the header wordmark's rect and moved
+     * with a transform, so p = 1 is pixel-identical to the header's own wordmark.
+     */
+    function logoStep(t: number) {
+      if (logoLanded) return;
+      const { logo } = headerParts();
+      if (!logo) return landLogo();
+      const lr = logo.getBoundingClientRect();
+      const w = fly.offsetWidth;
+      const h = fly.offsetHeight;
+      const S = viewW < 768 ? LOGO_SCALE_MOBILE : LOGO_SCALE;
+      const p = inOut(clamp01((t - I_START_GROW) / (I_GROW + I_HOLD)));
+      if (!logoFrom || p === 0) logoFrom = { x: viewW / 2, y: headlineTop() - LOGO_GAP - (S * h) / 2 };
+      const appear = outCubic(clamp01((t - 0.15) / 0.6));
+      const sc = lerp(S, 1, p);
+      // centre travels from above the headline to the header wordmark, with a slight upward arc
+      const cx = lerp(logoFrom.x, lr.left + w / 2, p);
+      const cy = lerp(logoFrom.y, lr.top + h / 2, p) - 40 * Math.sin(Math.PI * p) + (1 - appear) * 14;
+      fly.style.left = `${lr.left}px`;
+      fly.style.top = `${lr.top}px`;
+      fly.style.transform = `translate3d(${(cx - (sc * w) / 2 - lr.left).toFixed(1)}px, ${(cy - (sc * h) / 2 - lr.top).toFixed(1)}px, 0) scale(${sc.toFixed(4)})`;
+      fly.style.opacity = String(appear);
+      const g = 1 - p;
+      fly.style.textShadow = `0 0 ${(18 * g).toFixed(1)}px rgba(190,170,255,${(0.75 * g).toFixed(2)})${p > 0.45 ? `, ${LOGO_EXTRUDE}` : ''}`;
+      if (p >= 1) landLogo();
+    }
+
     /** intro timeline -> iv (depth, tilt, face colour, objects), side colours and the background layers */
     const ring = (el: HTMLElement, p: number, fade: number) => {
       el.style.transform = `translate(-50%, -50%) scale(${(0.3 + 2.2 * outCubic(p)).toFixed(3)})`;
@@ -409,7 +488,7 @@ export function ObjectsHero() {
     function introStep(now: number) {
       if (!introOn) return;
       if (!introStart) {
-        // waiting for the font: flat, glowing, field only
+        // waiting for the font: field only
         ring(r1, 0, 1);
         ring(r2, 0, 1);
         return;
@@ -436,6 +515,7 @@ export function ObjectsHero() {
       const glow = 1 - black;
       canvas!.style.filter = glow > 0.01 ? `drop-shadow(0 0 ${(26 * glow).toFixed(1)}px rgba(190,170,255,${(0.7 * glow).toFixed(2)}))` : '';
 
+      logoStep(t);
       if (t >= I_START_HAND) showHeader();
       if (t >= I_END) endIntro();
     }
@@ -580,11 +660,6 @@ export function ObjectsHero() {
       host!.style.visibility = b >= 0.999 ? 'hidden' : 'visible';
     }
 
-    const tmpV = new THREE.Vector3();
-    const tBox = new THREE.Box3();
-    const tCenter = new THREE.Vector3();
-    const corner = new THREE.Vector3();
-    const textLocalBox = new THREE.Box3();
     function keepTitleClear(instant: boolean) {
       world.updateMatrixWorld(true);
       camera.updateMatrixWorld(true);
@@ -688,6 +763,7 @@ export function ObjectsHero() {
       pieces.forEach((c) => placePiece(c));
       assignSphere();
       measureDisc();
+      logoFrom = null;
       frame(true);
     }
 
@@ -993,6 +1069,16 @@ export function ObjectsHero() {
         />
 
         <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full" style={{ cursor: 'grab', touchAction: 'pan-y' }} aria-hidden="true" />
+
+        {/* intro wordmark: same type as the header's "harbor", flies into the header's top-left corner */}
+        <div
+          ref={flyRef}
+          aria-hidden="true"
+          className="pointer-events-none fixed left-0 top-0 whitespace-nowrap text-[26px] font-bold leading-none tracking-[-0.03em] text-white will-change-transform"
+          style={{ opacity: 0, transformOrigin: '0 0' }}
+        >
+          harbor
+        </div>
 
         <h1
           className={failed ? 'absolute inset-0 z-0 flex items-center justify-center px-6 text-center text-[44px] md:text-[88px] font-bold leading-[1.02] tracking-[-0.03em]' : 'sr-only'}

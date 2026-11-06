@@ -2,17 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { EMAIL } from '../data/content';
 import { CV_URL, CV_LABEL } from '../data/links';
 
-/**
- * Home header, built FROM the hero instead of floating on top of it. Exactly 56px tall, flush with the top edge,
- * never any background.
- *
- *  - Over the blue hero (and any dark section): white text; the wordmark and current menu item carry the headline's
- *    deep-cobalt extrusion, and CV is a small 3D key (white face, cobalt side) that presses down on hover/click.
- *  - Over light sections: soft-black text (#1C1C1E, not pure #000) with no extrusion, and the CV key turns
- *    soft-black (graphite side) — still no background behind the header.
- * Which one is decided by the colour actually under the header.
- * Phones: wordmark + CV only (the menu does not fit in 56px).
- */
 const ITEMS = [
   { id: 'experience', label: 'Experience' },
   { id: 'work', label: 'Projects' },
@@ -52,11 +41,11 @@ const bgLum = (el: Element | null): number | null => {
   return null;
 };
 
-// a section that starts under the end of the hero says how far past its top its real start is
 const navOffset = (el: HTMLElement) => ((Number(el.dataset.navOffsetVh) || 0) * window.innerHeight) / 100;
+const onAboutPage = () => window.location.hash === '#/about';
 
 export function HomeDock() {
-  const [active, setActive] = useState('home');
+  const [active, setActive] = useState(() => onAboutPage() ? 'about' : 'home');
   const [light, setLight] = useState(false);
   const [pressed, setPressed] = useState(false);
   const [hoverCv, setHoverCv] = useState(false);
@@ -65,13 +54,17 @@ export function HomeDock() {
     let raf = 0;
     const check = () => {
       raf = 0;
-      const mid = window.innerHeight * 0.5;
-      let cur = 'home';
-      TRACKED.forEach((id) => {
-        const el = document.getElementById(id);
-        if (el && el.getBoundingClientRect().top + navOffset(el) <= mid) cur = id;
-      });
-      setActive(cur);
+      if (onAboutPage()) {
+        setActive('about');
+      } else {
+        const mid = window.innerHeight * 0.5;
+        let cur = 'home';
+        TRACKED.forEach((id) => {
+          const el = document.getElementById(id);
+          if (el && el.getBoundingClientRect().top + navOffset(el) <= mid) cur = id;
+        });
+        setActive(cur);
+      }
       const under = document.elementsFromPoint(window.innerWidth / 2, HEADER_H / 2).find((el) => !el.closest('[data-home-header]'));
       const l = bgLum(under ?? null);
       setLight(l !== null && l > 0.55);
@@ -83,9 +76,11 @@ export function HomeDock() {
     const t = window.setInterval(check, 700);
     window.addEventListener('scroll', on, { passive: true });
     window.addEventListener('resize', on);
+    window.addEventListener('hashchange', on);
     return () => {
       window.removeEventListener('scroll', on);
       window.removeEventListener('resize', on);
+      window.removeEventListener('hashchange', on);
       window.clearInterval(t);
       if (raf) cancelAnimationFrame(raf);
     };
@@ -94,15 +89,35 @@ export function HomeDock() {
   const go = (id: string) => (e: React.MouseEvent) => {
     e.preventDefault();
     if (id === 'about') {
-      window.location.hash = '#/about';
+      if (onAboutPage()) {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        window.location.hash = '#/about';
+      }
       return;
     }
     if (id === 'home') {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      if (onAboutPage()) {
+        window.location.hash = '';
+        requestAnimationFrame(() => window.scrollTo(0, 0));
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
       return;
     }
     const el = document.getElementById(id);
-    if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY + navOffset(el), behavior: 'smooth' });
+    if (el) {
+      window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY + navOffset(el), behavior: 'smooth' });
+    } else if (onAboutPage()) {
+      window.location.hash = `#${id}`;
+      let tries = 0;
+      const tick = () => {
+        const target = document.getElementById(id);
+        if (target) target.scrollIntoView({ block: 'start' });
+        else if (tries++ < 40) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }
   };
 
   const fg = light ? SOFT_BLACK : '#FFFFFF';
