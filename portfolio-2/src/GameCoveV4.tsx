@@ -10,7 +10,7 @@ import React, { useEffect, useRef, useState } from 'react'
  * Scroll interactions follow the Trust Bank page:
  *  - soft block reveal as each block enters (1.2s, staggered)
  *  - numbers count up as they scroll in (impact, design-system stats, SUS)
- *  - Process: accordion (hover / click opens a stage)
+ *  - Process: looping orbit motion (design thinking stages, with the Test → Define iteration loops)
  *  - HMW callout pops on like the Trust Bank HMW notes; question / rule cards bounce in one after another
  *  - Prototype: the design flow lights up step by step
  *  - Final design: pinned showcase — scrolling moves feature 1 → 2 → 3, progress runs around the active card
@@ -25,12 +25,13 @@ const L = 'https://raw.githubusercontent.com/Harbor-K/landing_page/main/gamecove
 const V = L + 'v4/'
 // Hero motion: the 15s ad (Figma "Hero banner · gamecove" + synthesised music/SFX). Starts muted, like the Trust Bank hero.
 export const HERO_VIDEO = V + 'hero-ad.mp4'
-// "View vibecoding site": the Figma button has no link yet. Put the address here and the button appears.
-export const VIBE_URL = ''
+// "View dashboard": opens the vibe-coded GameCove prototype (sample game BounceBounce).
+export const VIBE_URL = 'https://game-cove.vercel.app/projects/bouncebounce/overview'
 
 const IMG = {
   logo: L + 'logo.png',
   poster: V + 'hero-ad-poster.jpg',
+  process: V + 'process-orbit.gif',
   accEmpathize: V + 'acc-empathize.webp', accDefine: V + 'acc-define.webp', accIdeate: V + 'acc-ideate.webp',
   journey: V + 'journey.webp', players: V + 'players.webp', affinity: V + 'affinity.webp',
   story: V + 'story.webp', sketch: V + 'sketch.webp', photo1: L + 'photo-1.webp', photo2: L + 'photo-2.webp',
@@ -219,7 +220,7 @@ function Hero() {
           <img className="g-logo" src={IMG.logo} alt="GameCove" />
           <h1 className="g-h1">Helping first-time game creators<br />decide what to fix next</h1>
           <p className="g-lead">An AI analytics dashboard that reads your game first<br />GameCove · Product design case study</p>
-          {VIBE_URL && <a className="g-btn" href={VIBE_URL} target="_blank" rel="noreferrer">View vibecoding site</a>}
+          {VIBE_URL && <a className="g-btn" href={VIBE_URL} target="_blank" rel="noreferrer">View dashboard<span className="g-btn-arrow" aria-hidden="true">↗</span></a>}
         </div>
         {HERO_VIDEO
           ? <SoundMotion />
@@ -265,49 +266,14 @@ function Overview() {
 
 /* ---------- process (accordion) ---------- */
 
-type Stage = { n: string; stage: string; title: string; items: string[]; img?: string; alt?: string }
-const STAGES: Stage[] = [
-  { n: '01', stage: 'EMPATHIZE', title: 'What do creators and players need?', items: ['27 creator posts', '47 player reviews + 39 feedback posts', 'Research papers & existing tools', 'Creator interviews'], img: IMG.accEmpathize, alt: 'User journey map (FigJam)' },
-  { n: '02', stage: 'DEFINE', title: 'One problem + 3 questions', items: ['Affinity map', 'Thematic analysis', 'Problem statement & HMW', '3 design questions'], img: IMG.accDefine, alt: 'Problem definition board (FigJam)' },
-  { n: '03', stage: 'IDEATE', title: '6 rules + first ideas', items: ['6 design principles', 'Low-fi sketches & wireflow'], img: IMG.accIdeate, alt: 'Low-fi metric sketch' },
-  { n: '04', stage: 'PROTOTYPE', title: 'From sketch to coded prototype', items: ['Mid-fi → Hi-fi', 'Dark / light design system', 'Vibe-coded prototype'], img: IMG.hifi, alt: 'Hi-fi Retention screen' },
-  { n: '05', stage: 'TEST', title: 'Usability test + fixes', items: ['Sample game with 3 hidden problems', '5 test sessions, SUS + SEQ', 'Fix list'] },
-]
-
-function StageBody({ s }: { s: Stage }) {
-  return (
-    <div className="acc-body">
-      <ul>{s.items.map(i => <li key={i}>· {i}</li>)}</ul>
-      {s.img && <img src={s.img} alt={s.alt} loading="lazy" />}
-    </div>
-  )
-}
-
 function Process() {
-  const [on, setOn] = useState(0)
   return (
     <section className="g-sec" data-chapter="Process">
       <div className="g-wrap">
         <div data-r><Eyebrow label="PROCESS" /><H2 className="mt-40">5 stages, 2 turning points</H2></div>
-        <div className="acc mt-40" data-r>
-          {STAGES.map((s, i) => (
-            <button key={s.stage} type="button" className={'acc-card' + (i === on ? ' on' : '')} aria-expanded={i === on}
-              onMouseEnter={() => setOn(i)} onFocus={() => setOn(i)} onClick={() => setOn(i)}>
-              <span className="acc-stage">{s.stage}</span>
-              <span className="acc-title"><b>{s.n}</b>{s.title}</span>
-              <StageBody s={s} />
-            </button>
-          ))}
-        </div>
-        <div className="acc-narrow mt-40">
-          {STAGES.map(s => (
-            <div key={s.stage} className="acc-card on" data-r>
-              <span className="acc-stage">{s.stage}</span>
-              <span className="acc-title"><b>{s.n}</b>{s.title}</span>
-              <StageBody s={s} />
-            </div>
-          ))}
-        </div>
+        <figure className="g-process mt-40" data-r>
+          <img src={IMG.process} alt="Design thinking process: Empathize, Define, Ideate, Prototype and Test in order, then loops back from Test to Define, Define to Prototype and Prototype to Test" loading="lazy" />
+        </figure>
         <div className="g-turns mt-40" data-r>
           <p><span aria-hidden="true">↺</span>We narrowed the idea from “explain player behaviour” to “give creators the information they need”</p>
           <p><span aria-hidden="true">↺</span>After teacher feedback, we moved from solo users (B2C) to teams sharing one game (B2B)</p>
@@ -954,8 +920,19 @@ export const GC4_CSS = `
 /* hero */
 .gc4 .g-hero { padding: 160px 0 0; }
 .gc4 .g-logo { height: 40px; width: auto; }
-.gc4 .g-btn { display: inline-flex; margin-top: 32px; padding: 14px 22px; border-radius: 8px; background: var(--sand); color: #111114; font-size: 16px; font-weight: 700; text-decoration: none; transition: transform .3s var(--ease), background .3s; }
-.gc4 .g-btn:hover { transform: translateY(-2px); background: #fff; }
+.gc4 .g-btn { position: relative; display: inline-flex; align-items: center; gap: 10px; margin-top: 36px; padding: 15px 28px; border-radius: 999px; color: #F2F0EC; font-size: 16px; font-weight: 500; text-decoration: none;
+  background: linear-gradient(180deg, rgba(255,255,255,.10) 0%, rgba(255,255,255,.02) 55%, rgba(0,0,0,.25) 100%), #141417;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.22), inset 0 -1px 0 rgba(0,0,0,.6), 0 10px 30px rgba(0,0,0,.45);
+  transition: transform .35s var(--ease), box-shadow .35s var(--ease), background .35s; }
+.gc4 .g-btn::before { content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none;
+  background: linear-gradient(180deg, rgba(255,255,255,.55), rgba(255,255,255,.12) 45%, rgba(255,255,255,.28));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
+.gc4 .g-btn:hover { transform: translateY(-2px); box-shadow: inset 0 1px 0 rgba(255,255,255,.3), inset 0 -1px 0 rgba(0,0,0,.6), 0 14px 36px rgba(0,0,0,.5), 0 0 28px rgba(56,152,248,.25); }
+.gc4 .g-btn:focus-visible { outline: 2px solid var(--sky); outline-offset: 3px; }
+.gc4 .g-btn-arrow { font-size: 16px; color: var(--sky); transition: transform .35s var(--ease); }
+.gc4 .g-btn:hover .g-btn-arrow { transform: translate(2px, -2px); }
+.gc4 .g-process { overflow: hidden; border-radius: 12px; border: 1px solid var(--line); background: #0B0B0D; }
+.gc4 .g-process img { display: block; width: 100%; height: auto; }
 .gc4 .g-banner { margin-top: 64px; overflow: hidden; border-radius: 16px; background: #fff; aspect-ratio: 2 / 1; }
 .gc4 .g-banner img, .gc4 .g-banner video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .gc4 .g-video { position: relative; }
