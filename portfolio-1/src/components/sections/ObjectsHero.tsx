@@ -3,8 +3,9 @@ import * as THREE from 'three';
 import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
 import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
 import {
-  DESK_EDGE, DESK_TOP, DESK_TOP_NEAR, DESK_EDGE_SHADE, SIDE_WALL, WALL_FILL, DESK_CAM, DESK_LOOK_Y, LAND_DIST,
-  SLOTS_DESKTOP, SLOTS_MOBILE, type DeskSlot,
+  DESK_EDGE, DESK_TOP, DESK_TOP_NEAR, DESK_EDGE_SHADE, SIDE_WALL, WALL_FILL, DESK_CAM, DESK_LOOK_Y,
+  SLOTS_DESKTOP, SLOTS_MOBILE, LIFT, STAGGER, SHADOW_CSS, SHADOW_FLAT_CSS, placeMotion, shadowSize, flatShadowSize,
+  slotDist, type DeskSlot,
 } from './deskScene';
 
 /**
@@ -27,12 +28,13 @@ import {
  * saturated and then dimmed (blue multiply + navy fog) like agentcard's objects.
  *
  * Scroll — "the desk", laid out like Harbor's ClassPass reference (gift-card hero): same frame, same copy spot
- * and amount (a two-line headline + one button, top-left), same desk shape (back edge from the left side up to a
- * corner near the right, darker side wall past it), props spread centre-right. Tuning lives in ./deskScene.ts.
+ * and amount (a two-line headline + one rounded button, top-left), same desk shape. Tuning lives in ./deskScene.ts.
  *  1. The headline falls back into the scene and disappears.
  *  2. The background flattens into the plain blue wall and the desk slides up into place.
- *  3. Seven of the floating objects drop onto the desk, one after another, where the reference has its props,
- *     and settle with soft shadows in full colour; the rest drift out of frame.
+ *  3. Six objects are set down on the desk one at a time, like a hand placing them: carried to just above
+ *     their place, lowered straight down to a soft touch, a hair of squash, a small rock back to level, rest.
+ *     The laptop and mug stand; the phone, clipboard, sticky notes and headphones are laid down flat (turned
+ *     and squashed into a top-down look) with a tight footprint shadow. The rest of the objects drift away.
  *  4. The copy fades in (PLACEHOLDER copy for now). Then the page moves on.
  *
  *  - Mouse move: the camera swings around the headline. Drag: rotates the whole world.
@@ -41,7 +43,7 @@ import {
 /** Kept for Work.tsx (the old Experience coin section, no longer on the home page). */
 export const HERO_OVERLAP_VH = 80;
 /** Scroll length (vh) the pinned hero uses for its story. */
-const STORY_VH = 230;
+const STORY_VH = 270;
 
 const BG_FILL = 'radial-gradient(ellipse 75% 70% at 50% 48%, #3653F0 0%, #2238D0 38%, #152391 66%, #0A1050 86%, #050826 100%)';
 const FG = '#FFFFFF';
@@ -311,7 +313,6 @@ export function ObjectsHero() {
     const LOOK_X = 0;
     const FOV_HALF = THREE.MathUtils.degToRad(17.5);
     const frustumH = (z: number) => 2 * Math.tan(FOV_HALF) * (23 - z);
-    const landFrustumH = 2 * Math.tan(FOV_HALF) * LAND_DIST; // frame height in world units where objects land
     const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
 
     let disposed = false;
@@ -414,9 +415,11 @@ export function ObjectsHero() {
     let K = 2026;
     const Q = () => ((K = (16807 * K) % 0x7fffffff) - 1) / 0x7ffffffe;
 
-    type Slot = DeskSlot & { P: THREE.Vector3; shadow: HTMLDivElement };
+    type Slot = DeskSlot & { dist: number; P: THREE.Vector3; Pup: THREE.Vector3; shadow: HTMLDivElement };
     type Piece = {
       mesh: THREE.Group;
+      flatG: THREE.Group; // squashes vertically to lay the picture down flat
+      plane: THREE.Mesh | null;
       kind: Kind;
       layer: 'grid' | 'shell';
       x: number;
@@ -429,10 +432,13 @@ export function ObjectsHero() {
       scale: number;
       radius: number;
       halfH: number;
+      pw: number; // plane width / height (local units)
+      ph: number;
       aspect: number; // width / height of the cut-out
       vis: number;
       f: number; // extra scale from the story (landing / leaving)
-      land: number; // 0..1 how settled on the desk
+      land: number; // 0..1 how far it has been carried to its place (no bobbing at 1)
+      rock: number; // extra tilt while being set down
       hidden: boolean;
       phase: number;
       roll: number;
@@ -447,22 +453,30 @@ export function ObjectsHero() {
 
     const tmpV = new THREE.Vector3();
     const rayV = new THREE.Vector3();
+    const carryV = new THREE.Vector3();
     const camPos = new THREE.Vector3();
     const tBox = new THREE.Box3();
     const tCenter = new THREE.Vector3();
     const corner = new THREE.Vector3();
     const textLocalBox = new THREE.Box3();
 
-    /** world point LAND_DIST in front of the desk camera, at screen fraction (fx, fy) */
-    function landPoint(fx: number, fy: number, out: THREE.Vector3) {
+    /** world point `dist` in front of the desk camera, at screen fraction (fx, fy) */
+    function landPoint(fx: number, fy: number, dist: number, out: THREE.Vector3) {
       rayV.set(fx * 2 - 1, 1 - fy * 2, 0.5).unproject(deskCam).sub(deskCam.position).normalize();
-      return out.copy(deskCam.position).addScaledVector(rayV, LAND_DIST);
+      return out.copy(deskCam.position).addScaledVector(rayV, dist);
     }
     function placeSlots() {
       deskCam.aspect = camera.aspect;
       deskCam.updateProjectionMatrix();
       deskCam.updateMatrixWorld(true);
-      for (const p of pieces) if (p.slot) landPoint(p.slot.x, p.slot.y - p.slot.h / 2, p.slot.P);
+      for (const p of pieces) {
+        if (!p.slot) continue;
+        const s = p.slot;
+        // standing: its bottom touches the desk at y; lying: its centre sits at y
+        const cy = s.flat ? s.y : s.y - s.h / 2;
+        landPoint(s.x, cy, s.dist, s.P);
+        landPoint(s.x, cy - LIFT, s.dist, s.Pup); // held just above its place
+      }
     }
 
     /** top edge of the headline on screen (px) */
@@ -584,8 +598,9 @@ export function ObjectsHero() {
       faceQ.copy(invWorldQ).multiply(camera.quaternion);
       for (const p of pieces) {
         const a = U * p.speed + p.phase;
-        const w = 1 - p.land; // settled objects stop bobbing
-        wobE.set(0.22 * Math.sin(a) * w, 0.32 * Math.cos(a) * w, p.roll * lerp(1, 0.2, p.land) + 0.1 * Math.sin(a * 0.6) * w);
+        const w = 1 - p.land; // objects being set down stop tumbling (their resting angle is on the picture itself)
+        const rest = p.slot ? 0 : p.roll;
+        wobE.set(0.22 * Math.sin(a) * w, 0.32 * Math.cos(a) * w, lerp(p.roll, rest, p.land) + p.rock + 0.1 * Math.sin(a * 0.6) * w);
         wobQ.setFromEuler(wobE);
         p.mesh.quaternion.copy(faceQ).multiply(wobQ);
       }
@@ -593,15 +608,15 @@ export function ObjectsHero() {
 
     /**
      * Scroll story: the headline falls back -> the wall flattens and the desk slides up ->
-     * the chosen objects drop onto their spots one after another (the rest drift away) -> the copy fades in.
+     * the chosen objects are set down one at a time (the rest drift away) -> the copy fades in.
      */
     function applyStory() {
       story.s1 = smooth(0, 0.16, sp);
-      story.d = smooth(0.06, 0.4, sp);
-      story.desk = smooth(0.08, 0.38, sp);
-      story.out = smooth(0.06, 0.36, sp);
-      story.land = smooth(0.16, 0.62, sp);
-      story.copy = smooth(0.5, 0.68, sp);
+      story.d = smooth(0.06, 0.36, sp);
+      story.desk = smooth(0.08, 0.34, sp);
+      story.out = smooth(0.06, 0.34, sp);
+      story.land = clamp01((sp - 0.14) / 0.68);
+      story.copy = smooth(0.66, 0.82, sp);
       const { s1, d, desk: dk, out, land, copy: cp } = story;
 
       faceMat.uniforms.flatMix.value = iv.flat;
@@ -624,23 +639,44 @@ export function ObjectsHero() {
 
       for (const p of pieces) {
         if (p.slot) {
-          const gi = smooth(0, 1, land * 1.7 - p.delay * 0.7);
-          p.land = gi;
-          // landed size = the slot's height on screen
-          const fLand = (p.slot.h * landFrustumH) / Math.max(0.001, 2 * p.halfH * p.scale);
-          p.f = lerp(1, fLand, gi);
-          const e = outCubic(gi);
-          const wob = 0.7 * Math.sin(0.3 * U + p.phase) * (1 - gi);
-          const P = p.slot.P;
-          p.mesh.position.set(lerp(p.bx, P.x, e), lerp(p.by, P.y, e) + 1.6 * Math.sin(Math.PI * e) * (1 - e), lerp(p.bz + wob, P.z, e));
-          // contact shadow (flat, on the desk) under the object
-          const sh = p.slot.shadow;
-          const wPx = p.slot.h * viewH * p.aspect;
-          sh.style.width = `${(wPx * 1.05).toFixed(0)}px`;
-          sh.style.height = `${(wPx * 0.2).toFixed(0)}px`;
-          sh.style.opacity = String((gi * gi * dk).toFixed(3));
+          const s = p.slot;
+          const flat = s.flat ?? 1;
+          const lying = s.flat !== undefined;
+          // its own turn, one after another (back row first)
+          const g = clamp01((land - p.delay * STAGGER.spread) / STAGGER.span);
+          const m = placeMotion(g);
+          p.land = m.carry;
+          p.rock = m.rock;
+          // resting size = the slot's picture height on screen (at this slot's distance)
+          const fLand = (s.h * 2 * Math.tan(FOV_HALF) * s.dist) / Math.max(0.001, 2 * p.halfH * p.scale);
+          p.f = lerp(1, fLand, m.carry);
+          const wob = 0.7 * Math.sin(0.3 * U + p.phase) * (1 - m.carry);
+          // carried to just above its place, then lowered straight down onto the desk
+          carryV.set(lerp(p.bx, s.Pup.x, m.carry), lerp(p.by, s.Pup.y, m.carry), lerp(p.bz + wob, s.Pup.z, m.carry));
+          p.mesh.position.copy(carryV).lerp(s.P, m.down);
+          // turn to its resting angle; lying objects also tip down flat (vertical squash) as they come
+          p.flatG.scale.y = lerp(1, flat, m.carry);
+          if (p.plane) {
+            p.plane.rotation.z = s.tilt * m.carry;
+            if (lying) {
+              p.plane.scale.set(p.pw, p.ph, 1);
+              p.plane.position.y = 0;
+            } else {
+              // a hair of squash on contact, keeping the bottom on the desk
+              p.plane.scale.set(p.pw * m.squashX, p.ph * m.squashY, 1);
+              p.plane.position.y = -(1 - m.squashY) * p.ph * 0.5;
+            }
+          }
+          // contact shadow: wide and faint while it is up, tight and dark once it rests
+          const objH = s.h * viewH;
+          const objW = objH * p.aspect;
+          const sz = lying ? flatShadowSize(objW, objH, s.tilt, flat, m.shadowScale) : shadowSize(objW, m.shadowScale);
+          s.shadow.style.width = `${sz.w.toFixed(0)}px`;
+          s.shadow.style.height = `${sz.h.toFixed(0)}px`;
+          s.shadow.style.opacity = String((m.shadowOpacity * dk).toFixed(3));
         } else {
           p.land = 0;
+          p.rock = 0;
           p.f = Math.max(0.001, 1 - out);
           const wob = 0.7 * Math.sin(0.3 * U + p.phase);
           const push = 1 + 1.3 * out;
@@ -755,14 +791,17 @@ export function ObjectsHero() {
       const make = (layer: Piece['layer'], x: number, y: number, z: number): Piece => {
         const kind = TYPES[t++ % TYPES.length];
         const outerG = new THREE.Group();
+        const flatG = new THREE.Group();
+        outerG.add(flatG);
         const scale = 1.15 + 0.4 * Q();
         const phase = Q() * Math.PI * 2;
         const roll = (Q() - 0.5) * 0.7;
         world.add(outerG);
         const size = ASSETS[kind].size * SIZE_BOOST * (mobile ? 0.85 : 1);
         const piece: Piece = {
-          mesh: outerG, kind, layer, x, y, z, bx: 0, by: 0, bz: z, delay: Q(), scale, radius: size * 0.5,
-          halfH: size * 0.4, aspect: 1, vis: 1, f: 1, land: 0, hidden: false, phase, roll, speed: 0.12 + 0.15 * Q(), slot: null,
+          mesh: outerG, flatG, plane: null, kind, layer, x, y, z, bx: 0, by: 0, bz: z, delay: Q(), scale, radius: size * 0.5,
+          halfH: size * 0.4, pw: size, ph: size, aspect: 1, vis: 1, f: 1, land: 0, rock: 0, hidden: false, phase, roll,
+          speed: 0.12 + 0.15 * Q(), slot: null,
         };
         getKind(kind).then((res) => {
           if (!res || disposed) return;
@@ -770,9 +809,12 @@ export function ObjectsHero() {
           const w = res.aspect >= 1 ? size : size * res.aspect;
           const h = res.aspect >= 1 ? size / res.aspect : size;
           plane.scale.set(w, h, 1);
+          piece.plane = plane;
+          piece.pw = w;
+          piece.ph = h;
           piece.halfH = h / 2;
           piece.aspect = res.aspect;
-          outerG.add(plane);
+          flatG.add(plane);
           if (reduce.matches || !raf) frame(true);
         });
         return piece;
@@ -807,7 +849,7 @@ export function ObjectsHero() {
       }
       pieces = list;
 
-      // one floating object of each slot's kind goes to that spot (front-most first); drop order runs back to front
+      // one floating object of each slot's kind goes to that spot (front-most first); set down back row first
       const slots = mobile ? SLOTS_MOBILE : SLOTS_DESKTOP;
       const order = [...slots].sort((a, b) => a.y - b.y);
       order.forEach((s, i) => {
@@ -816,10 +858,10 @@ export function ObjectsHero() {
           .sort((a, b) => (a.layer === b.layer ? b.z - a.z : a.layer === 'grid' ? -1 : 1))[0];
         if (!cand) return;
         const shadow = document.createElement('div');
-        shadow.style.cssText = `position:absolute;left:${(s.x * 100).toFixed(2)}%;top:${(s.y * 100).toFixed(2)}%;transform:translate(-50%,-62%);border-radius:50%;opacity:0;pointer-events:none;background:radial-gradient(closest-side, rgba(12,22,90,0.34), rgba(12,22,90,0.16) 55%, rgba(12,22,90,0) 100%);`;
+        shadow.style.cssText = `${s.flat ? SHADOW_FLAT_CSS : SHADOW_CSS}left:${(s.x * 100).toFixed(2)}%;top:${(s.y * 100).toFixed(2)}%;`;
         shadowsEl.appendChild(shadow);
-        cand.slot = { ...s, P: new THREE.Vector3(), shadow };
-        cand.delay = (i / Math.max(1, order.length - 1)) * 0.9;
+        cand.slot = { ...s, dist: slotDist(s.y), P: new THREE.Vector3(), Pup: new THREE.Vector3(), shadow };
+        cand.delay = i / Math.max(1, order.length - 1);
       });
     }
 
@@ -1018,6 +1060,7 @@ export function ObjectsHero() {
   }, []);
 
   const E = DESK_EDGE;
+  const edgePts = `0,${E.leftY * 100} ${E.cornerX * 100},${E.cornerY * 100} 100,${E.rightY * 100}`;
   return (
     <section
       id="home"
@@ -1036,20 +1079,25 @@ export function ObjectsHero() {
         {/* the desk scene's plain blue wall (fades in on scroll) */}
         <div ref={wallRef} className="pointer-events-none absolute inset-0" style={{ backgroundImage: WALL_FILL, opacity: 0 }} aria-hidden="true" />
 
-        {/* the desk (flat, like the reference): back edge from the left side up to a corner, darker side wall past it */}
+        {/* the desk (flat, like the reference): back edge from the left side up to a corner, darker side wall past it.
+            The edge is softened: a faint shadow on the wall just above it and a rounded light lip along it. */}
         <div ref={deskRef} className="pointer-events-none absolute inset-0 will-change-transform" style={{ visibility: 'hidden' }} aria-hidden="true">
           <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
             <defs>
               <linearGradient id="deskTop" x1="0" y1="1" x2="0.9" y2="0.15">
                 <stop offset="0" stopColor={DESK_TOP_NEAR} />
-                <stop offset="0.7" stopColor={DESK_TOP} />
+                <stop offset="0.72" stopColor={DESK_TOP} />
                 <stop offset="1" stopColor={DESK_EDGE_SHADE} />
               </linearGradient>
             </defs>
             <polygon points={`${E.cornerX * 100},0 100,0 100,${E.rightY * 100} ${E.cornerX * 100},${E.cornerY * 100}`} fill={SIDE_WALL} />
-            <polygon points={`0,${E.leftY * 100} ${E.cornerX * 100},${E.cornerY * 100} 100,${E.rightY * 100} 100,100 0,100`} fill="url(#deskTop)" />
+            {/* soft contact shadow where the desk meets the wall */}
+            <polyline points={edgePts} fill="none" stroke="rgba(8,16,80,0.28)" strokeWidth={10} strokeLinejoin="round" vectorEffect="non-scaling-stroke" style={{ filter: 'blur(4px)' }} />
+            <polygon points={`${edgePts} 100,100 0,100`} fill="url(#deskTop)" />
+            {/* rounded lip: a thin light line along the edge */}
+            <polyline points={edgePts} fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
           </svg>
-          {/* contact shadows of the landed objects (added by the scene) */}
+          {/* contact shadows of the objects (added by the scene) */}
           <div ref={shadowsRef} className="absolute inset-0" />
         </div>
 
@@ -1070,7 +1118,8 @@ export function ObjectsHero() {
 
         <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full" style={{ cursor: 'grab', touchAction: 'pan-y' }} aria-hidden="true" />
 
-        {/* desk scene copy: same spot and amount as the reference — two-line headline + one button (PLACEHOLDER copy) */}
+        {/* desk scene copy: same spot and amount as the reference — two-line headline + one button (PLACEHOLDER copy).
+            The button is rounded like the header's CV button (8px). */}
         <div
           ref={copyRef}
           className="absolute z-[3] text-white"
@@ -1086,8 +1135,8 @@ export function ObjectsHero() {
           </h2>
           <a
             href="#/trust-bank"
-            className="inline-flex items-center justify-center rounded-[2px] bg-white font-medium text-black transition-opacity hover:opacity-90"
-            style={{ marginTop: 'max(24px, 1.95vw)', height: 'max(48px, 3.3vw)', padding: '0 max(18px, 1.2vw)', fontSize: 'max(16px, 1.15vw)' }}
+            className="inline-flex items-center justify-center rounded-[8px] bg-white font-bold text-black transition-opacity hover:opacity-90"
+            style={{ marginTop: 'max(24px, 1.95vw)', height: 'max(48px, 3.3vw)', padding: '0 max(20px, 1.3vw)', fontSize: 'max(16px, 1.15vw)' }}
           >
             See my work
           </a>
