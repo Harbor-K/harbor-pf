@@ -6,7 +6,7 @@ import { TrustBankCase } from './components/case/TrustBankCase';
 import { GameCoveCase } from './components/case/GameCoveCase';
 import { PlaceholderCase } from './components/case/PlaceholderCase';
 import { CaseReveal } from './components/case/CaseReveal';
-import { CaseEnterFade } from './components/case/CaseChrome';
+import { CaseSwapScroll } from './components/case/CaseChrome';
 import { ImageLightbox } from './components/case/ImageLightbox';
 import { CursorTrail } from './components/CursorTrail';
 import { AboutPage } from './components/about/AboutPage';
@@ -23,7 +23,8 @@ function readRoute() {
 // the Projects book (sections/Experience.tsx; the case studies are in the header's Work menu), and the
 // About me + Kim LLM section (sections/WhatIDo.tsx).
 // Header menu: Work (a dropdown with the three case studies) and About me (#/about).
-// Case studies: scrolling past the end opens the next one (CaseChrome's NextProjectCard), which fades in.
+// Case studies: scrolling past either end moves to the neighbouring case (CaseChrome's NextProjectCard);
+// CaseSwapScroll (last child of CaseReveal) puts the new case where the live view showed it.
 export function App() {
   const [route, setRoute] = useState(readRoute);
 
@@ -58,17 +59,16 @@ export function App() {
         <AboutPage onClose={closeAbout} />
       ) : route ? (
         <div className="case-grid" key={route}>
-          <CaseEnterFade>
-            <ImageLightbox>
-              <CaseReveal>
-                {route === '#/trust-bank' && <TrustBankCase onClose={closeCase} />}
-                {route === '#/gamecove' && <GameCoveCase onClose={closeCase} />}
-                {route === '#/utrada' && (
-                  <PlaceholderCase name="UTrada" accent="#8301D5" onClose={closeCase} nextName="Trust Bank" nextHref="#/trust-bank" />
-                )}
-              </CaseReveal>
-            </ImageLightbox>
-          </CaseEnterFade>
+          <ImageLightbox>
+            <CaseReveal>
+              {route === '#/trust-bank' && <TrustBankCase onClose={closeCase} />}
+              {route === '#/gamecove' && <GameCoveCase onClose={closeCase} />}
+              {route === '#/utrada' && (
+                <PlaceholderCase name="UTrada" accent="#8301D5" onClose={closeCase} nextName="Trust Bank" nextHref="#/trust-bank" />
+              )}
+              <CaseSwapScroll />
+            </CaseReveal>
+          </ImageLightbox>
         </div>
       ) : (
         // home-min16: page content never goes below 16px (see index.css)

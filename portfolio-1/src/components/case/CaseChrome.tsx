@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { motion, useMotionValueEvent, useReducedMotion, useScroll } from 'framer-motion';
 import { XIcon } from 'lucide-react';
 import { CASE_ORDER } from './CaseNav';
@@ -9,24 +9,26 @@ import { CASE_ORDER } from './CaseNav';
  * Header: at the very top the close button and Next · GameCove sit on the 1440 container edges;
  * once you scroll they slide out to the screen edges with a 20px margin and stay there.
  * Scrolling down tucks the whole header up out of view; scrolling up (or reaching the top) brings it back.
- * "Next · GameCove" scrolls down to the next-project card; the card opens the next case study.
+ * "Next · GameCove" scrolls down to the next-project panel.
  * Font: Helvetica Neue (the font-inter class is kept from the UX page but has no Inter here).
  * Dark sections: anything under the header inside an element with data-tone="dark" switches the header to
  * light-on-dark (white × on a translucent white circle, white Next pill), so it stays readable on dark heroes.
- * Pages without data-tone look exactly as before.
  *
- * Project to project (after alvinn.design's project pages, Harbor's reference clip), both ways:
- *  - Down, at the end of a case: the next project's dark card rises from below. The page above shrinks a little
- *    toward its bottom edge, gets rounded bottom corners and darkens, with black around it. The card grows to
- *    fill the screen, stays pinned for a moment, and the next case opens.
- *  - Up, at the top of a case: keep scrolling up (or pull down on touch) and the previous project's card comes
- *    down from the top while the page slides down, shrinks and darkens. Pull far enough and the previous case
- *    opens at its end (just above its own next-project card); let go early and everything springs back.
- *  The hand-off has no blink: a copy of the full-screen card is laid over everything (outside React, so it
- *  survives the page swap), the new case is put in place underneath, and then the card slides away in the
- *  direction you were going (up when going down, down when going up) to uncover it.
- *  Clicking a card opens it the same way (the card first grows to fill the screen).
- *  Reduced motion: a plain next card, no auto-open, no pull, no slide.
+ * Project to project (after alvinn.design's project pages, Harbor's reference clip), both ways, with no card:
+ * the panel that comes in IS the other project's page (a live, non-interactive view of it).
+ *  - Down, at the end of a case: the next project's page (its top) rises from below. The page above shrinks a
+ *    little toward its bottom edge, gets rounded bottom corners and darkens. The panel grows to fill the screen;
+ *    a little more scrolling and the site is on the next project, at its top.
+ *  - Up, at the top of a case: keep scrolling up (or pull down on touch) and the previous project's page (its
+ *    end) comes down from above while this page slides down, shrinks and darkens. Pull far enough and the site
+ *    is on the previous project, at the same spot the view showed. Let go early and everything springs back.
+ *  Hand-off without any pop (like Figma's smart animate): the live view stays on top of the new page, scrolling
+ *  along with it, while the new page settles underneath (its own entrance animations, slideshows, images);
+ *  then the view dissolves into it, so any small difference melts across instead of jumping.
+ *  The live views are this site in iframes with ?embed=1, kept at body level (outside React) so the same view
+ *  survives the page change. The embedded copy shows everything at once and loads no views of its own.
+ *  The current header fades out as a panel reaches the top, since the panel shows the other page's header.
+ *  Reduced motion: a plain next-project card, no auto-open, no pull.
  */
 
 const HEADER_H = 82;
@@ -112,165 +114,159 @@ export function CaseHeader({ onClose, nextName }: { onClose: () => void; nextNam
 
 /* ---------- project-to-project transition ---------- */
 
-const CARD_BG = '#111114';
+const PANEL_BG = '#111114'; // behind a live view while it loads
 const PAGE_GAP = '#050506'; // what shows around the shrinking page
-// one line + meta for each project's card (Trust Bank's from its hero; GameCove / UTrada are PLACEHOLDER copy)
-const CARD_COPY: Record<string, { line: string; meta: string[] }> = {
-  'Trust Bank': { line: 'Turning hidden rewards into everyday loyalty', meta: ['8 weeks · 2026', 'Planning', 'UI Design', 'Usability test'] },
-  GameCove: { line: 'An AI analytics dashboard for game teams', meta: ['Team project', 'UX case study'] },
-  UTrada: { line: 'UX case study', meta: ['Fintech', 'Trading'] },
-};
 const PULL_WHEEL = 650; // wheel distance (px) at the top that opens the previous project
 const PULL_TOUCH = 320; // finger distance (px) that opens it on touch
-const FILL_MS = 450; // a clicked card growing to full screen
-const SLIDE_MS = 900; // the card sliding away to uncover the new case
-const EASE_SLIDE = 'cubic-bezier(0.76, 0, 0.24, 1)';
+const ARM_MS = 900; // no auto-switch right after a page opens
+const HOLD_MS = 900; // after the switch: the live view stays on top while the new page settles
+const DISSOLVE_MS = 800; // then it dissolves into the page
+// one line for the reduced-motion card (Trust Bank's and GameCove's from their heroes; UTrada PLACEHOLDER)
+const CARD_LINE: Record<string, string> = {
+  'Trust Bank': 'Turning hidden rewards into everyday loyalty',
+  GameCove: 'Helping first-time game creators decide what to fix next',
+  UTrada: 'UX case study',
+};
 
-// set right before another case opens, read by CaseEnterFade on the new page
+const EMBED = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('embed');
+/** true inside a live view (the iframe copy of a case) */
+export const isEmbedView = () => EMBED;
+
+type View = { clip: HTMLDivElement; frame: HTMLIFrameElement };
+
+// set right before another case opens, read by CaseSwapScroll / CaseReveal on the new page
 let enterFrom: '' | 'next' | 'prev' = '';
-let switching = false;
+let prevFromBottom: number | null = null; // going back: how far above the page bottom the view was scrolled
+let handoff: View | null = null; // the live view that stays on top of the new page until it dissolves
+/** true while a case is being opened from a neighbour's live view (CaseReveal shows what is on screen at once) */
+export const isCaseSwap = () => enterFrom !== '';
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 const smooth = (a: number, b: number, v: number) => {
   const t = clamp01((v - a) / (b - a));
   return t * t * (3 - 2 * t);
 };
-const nextFrame = () => new Promise<void>((res) => requestAnimationFrame(() => res()));
-const wait = (ms: number) => new Promise<void>((res) => window.setTimeout(res, ms));
-
-/**
- * The hand-off between two cases without a blink: lay a copy of the card over everything, make it fill the
- * screen, swap the page underneath, then slide the copy away (up when going to the next case, down when going back).
- */
-async function coverAndGo(card: HTMLElement, to: string, dir: 'next' | 'prev') {
-  if (switching) return;
-  switching = true;
-  const html = document.documentElement;
-  const prevOverflow = html.style.overflow;
-  const r = card.getBoundingClientRect();
-  const cover = card.cloneNode(true) as HTMLElement;
-  cover.removeAttribute('href');
-  cover.removeAttribute('id');
-  cover.setAttribute('aria-hidden', 'true');
-  cover.querySelectorAll<HTMLElement>('[data-hint]').forEach((h) => (h.style.opacity = '0'));
-  Object.assign(cover.style, {
-    position: 'fixed',
-    left: `${r.left}px`,
-    top: `${r.top}px`,
-    width: `${r.width}px`,
-    height: `${r.height}px`,
-    right: 'auto',
-    bottom: 'auto',
-    margin: '0',
-    transform: 'none',
-    visibility: 'visible',
-    pointerEvents: 'none',
-    zIndex: '60',
-    borderRadius: getComputedStyle(card).borderRadius,
-    transition: 'none',
-    willChange: 'transform',
-  });
-  document.body.appendChild(cover);
-  html.style.overflow = 'hidden'; // hold the scroll still through the hand-off
-
-  // a card that is not full screen yet (clicked mid-way) grows to fill it first
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-  if (r.left > 1 || r.top > 1 || r.width < vw - 1 || r.height < vh - 1) {
-    await nextFrame();
-    const ease = `${FILL_MS}ms cubic-bezier(0.65, 0, 0.35, 1)`;
-    cover.style.transition = ['left', 'top', 'width', 'height', 'border-radius'].map((p) => `${p} ${ease}`).join(', ');
-    Object.assign(cover.style, { left: '0px', top: '0px', width: `${vw}px`, height: `${vh}px`, borderRadius: '0px' });
-    await wait(FILL_MS);
-  } else {
-    cover.style.borderRadius = '0px';
-  }
-
-  // swap the page underneath
-  enterFrom = dir;
-  window.location.hash = to;
-  await nextFrame();
-  await nextFrame();
-  await wait(dir === 'prev' ? 160 : 60); // going back: the new case first moves to its end
-
-  // uncover it
-  cover.style.transition = `transform ${SLIDE_MS}ms ${EASE_SLIDE}`;
-  cover.style.transform = `translate3d(0, ${dir === 'next' ? '-100%' : '100%'}, 0)`;
-  await wait(SLIDE_MS + 40);
-  cover.remove();
-  html.style.overflow = prevOverflow;
-  switching = false;
-}
 
 function prevCase() {
   const here = typeof window === 'undefined' ? '' : window.location.hash;
   const i = CASE_ORDER.findIndex((c) => c.route === here);
   return CASE_ORDER[(Math.max(i, 0) - 1 + CASE_ORDER.length) % CASE_ORDER.length];
 }
+function viewUrl(route: string) {
+  const u = new URL(window.location.href);
+  u.searchParams.set('embed', '1');
+  u.hash = route;
+  return u.toString();
+}
+/** the scroll position that puts a document at its end: its next-project section just below the screen */
+function endOf(win: Window) {
+  const s = win.document.getElementById('next-project');
+  if (!s) return null;
+  return Math.max(0, s.getBoundingClientRect().top + win.scrollY - win.innerHeight);
+}
 
-/** the dark project card (used for both the next card and the previous card) */
-function CardBody({ name, icon, label, hint, hintRef }: { name: string; icon?: string; label: string; hint: React.ReactNode; hintRef: React.RefObject<HTMLParagraphElement>; }) {
-  const copy = CARD_COPY[name] ?? { line: 'UX case study', meta: [] };
-  return (
-    <>
-      <div className="grid grid-cols-1 gap-8 p-8 md:grid-cols-[1fr_minmax(0,460px)] md:p-12">
-        <div className="flex items-center gap-4">
-          {icon && <img src={icon} alt="" className="h-14 w-14 rounded-[12px] object-cover" />}
-          <p className="text-[40px] font-bold leading-none tracking-[-0.03em] md:text-[56px]">{name}</p>
-        </div>
-        <div>
-          <p className="flex items-center gap-3 text-[16px] text-[#8e8e95]">
-            <span className="h-3 w-3 rounded-full bg-[#9a5cf5]" aria-hidden />
-            {label}
-          </p>
-          <p className="mt-4 text-[22px] font-bold leading-[1.25] md:text-[26px]">{copy.line}</p>
-          {copy.meta.length > 0 && (
-            <ul className="mt-5 space-y-1 text-[16px] leading-[1.45] text-[#a7a9b0]">
-              {copy.meta.map((m) => (
-                <li key={m}>{m}</li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
-      <p ref={hintRef} data-hint="" className="flex items-center gap-2 p-8 text-[16px] text-[#8e8e95] md:p-12" style={{ opacity: 0 }}>
-        {hint}
-      </p>
-    </>
-  );
+/** a live view: a clipping box at body level with the other case inside, at the screen's own size */
+function makeView(route: string, title: string): View {
+  const clip = document.createElement('div');
+  clip.setAttribute('aria-hidden', 'true');
+  Object.assign(clip.style, {
+    position: 'fixed',
+    left: '0px',
+    top: '0px',
+    width: '0px',
+    height: '0px',
+    overflow: 'hidden',
+    zIndex: '41', // above the darkening (40), below the header (50)
+    pointerEvents: 'none',
+    visibility: 'hidden',
+    background: PANEL_BG,
+  });
+  const frame = document.createElement('iframe');
+  frame.src = viewUrl(route);
+  frame.title = title;
+  frame.tabIndex = -1;
+  Object.assign(frame.style, {
+    position: 'absolute',
+    left: '0px',
+    top: '0px',
+    width: `${window.innerWidth}px`,
+    height: `${window.innerHeight}px`,
+    border: '0',
+    pointerEvents: 'none',
+    background: 'transparent',
+  });
+  clip.appendChild(frame);
+  document.body.appendChild(clip);
+  return { clip, frame };
+}
+/** fit a view's clipping box to a panel; the page inside is offset so it stays at screen size */
+function fitView(v: View, r: DOMRect, radius: number, frameX: number, frameY: number, visible: boolean) {
+  const s = v.clip.style;
+  s.left = `${r.left.toFixed(1)}px`;
+  s.top = `${r.top.toFixed(1)}px`;
+  s.width = `${r.width.toFixed(1)}px`;
+  s.height = `${r.height.toFixed(1)}px`;
+  s.borderRadius = `${radius.toFixed(1)}px`;
+  s.visibility = visible ? 'visible' : 'hidden';
+  v.frame.style.left = `${frameX.toFixed(1)}px`;
+  v.frame.style.top = `${frameY.toFixed(1)}px`;
+  v.frame.style.width = `${window.innerWidth}px`;
+  v.frame.style.height = `${window.innerHeight}px`;
 }
 
 export function NextProjectCard({ name, href }: { name: string; href: string }) {
   const reduce = useReducedMotion();
   const sectionRef = useRef<HTMLElement>(null);
-  const cardRef = useRef<HTMLAnchorElement>(null);
+  const panelRef = useRef<HTMLAnchorElement>(null);
   const shadeRef = useRef<HTMLDivElement>(null);
-  const hintRef = useRef<HTMLParagraphElement>(null);
-  const prevCardRef = useRef<HTMLAnchorElement>(null);
-  const prevHintRef = useRef<HTMLParagraphElement>(null);
-  const info = CASE_ORDER.find((c) => c.route === href) ?? CASE_ORDER.find((c) => c.name === name);
+  const prevPanelRef = useRef<HTMLAnchorElement>(null);
+  const views = useRef<{ next: View | null; prev: View | null }>({ next: null, prev: null });
   const [prev] = useState(prevCase);
+  const live = !reduce && !EMBED;
 
+  /** switch to the other case; its live view (already filling the screen) is handed to the new page */
   const go = (to: string, dir: 'next' | 'prev') => {
-    const card = dir === 'next' ? cardRef.current : prevCardRef.current;
-    if (reduce || !card) {
-      window.location.hash = to;
-      return;
+    const v = dir === 'next' ? views.current.next : views.current.prev;
+    prevFromBottom = null;
+    handoff = null;
+    if (v) {
+      if (dir === 'prev') {
+        try {
+          const w = v.frame.contentWindow;
+          if (w) prevFromBottom = w.document.documentElement.scrollHeight - w.scrollY;
+        } catch {
+          /* not reachable: the new page goes to its end instead */
+        }
+      }
+      // make sure it covers the whole screen exactly (a click can come mid-way)
+      fitView(v, new DOMRect(0, 0, window.innerWidth, window.innerHeight), 0, 0, 0, true);
+      v.clip.style.zIndex = '49';
+      handoff = v;
+      if (dir === 'next') views.current.next = null;
+      else views.current.prev = null;
+      // safety: never leave it behind
+      window.setTimeout(() => {
+        if (handoff === v) {
+          v.clip.remove();
+          handoff = null;
+        }
+      }, 4000);
     }
-    coverAndGo(card, to, dir);
+    enterFrom = dir;
+    window.location.hash = to;
   };
 
   useEffect(() => {
     const section = sectionRef.current;
-    const card = cardRef.current;
+    const panel = panelRef.current;
     const shade = shadeRef.current;
-    const hint = hintRef.current;
-    const pCard = prevCardRef.current;
-    const pHint = prevHintRef.current;
-    if (!section || !card || !shade || !hint || !pCard || !pHint || reduce) return;
+    const pPanel = prevPanelRef.current;
+    if (!section || !panel || !shade || !pPanel || !live) return;
     const root = section.parentElement as HTMLElement | null;
     const main = root?.querySelector(':scope > main') as HTMLElement | null;
+    const header = root?.querySelector(':scope > header') as HTMLElement | null;
     if (!root || !main) return;
+    const v = views.current;
 
     // the page needs its own background so the black around it only shows at the edges
     const prevStyle = {
@@ -288,17 +284,41 @@ export function NextProjectCard({ name, href }: { name: string; href: string }) 
     let raf = 0;
     let opened = false;
     let mode: '' | 'down' | 'up' = ''; // which transition currently owns the page's styles
-    // a page that has just opened still has the old scroll position until its own scroll runs,
-    // so auto-open (either way) is only allowed a while after mounting (after the hand-off slide)
     let armed = false;
-    const armT = window.setTimeout(() => (armed = true), SLIDE_MS + 400);
+    const armT = window.setTimeout(() => (armed = true), ARM_MS);
+    const setHeader = (o: number) => {
+      if (header) header.style.opacity = o >= 1 ? '' : o.toFixed(3);
+    };
+
+    // the previous project's live view, scrolled to its end, ready a moment after this page opens
+    const prevT = window.setTimeout(() => {
+      if (v.prev) return;
+      const pv = makeView(prev.route, `${prev.name} (preview)`);
+      v.prev = pv;
+      pv.frame.addEventListener('load', () => {
+        let n = 0;
+        const tick = () => {
+          if (v.prev !== pv || pull > 0) return; // stop once it is in use
+          try {
+            const w = pv.frame.contentWindow;
+            const y = w ? endOf(w) : null;
+            if (w && y !== null) w.scrollTo(0, y);
+          } catch {
+            /* not reachable: leave it at its top */
+          }
+          if (++n < 12) window.setTimeout(tick, 300);
+        };
+        window.setTimeout(tick, 300);
+      });
+      drawPull();
+    }, 1200);
 
     const engage = (m: 'down' | 'up') => {
       mode = m;
       root.style.backgroundColor = PAGE_GAP;
       main.style.overflow = 'clip';
       main.style.willChange = 'transform';
-      main.style.transformOrigin = m === 'down' ? '50% 100%' : '50% 0'; // shrink toward the side the card comes from
+      main.style.transformOrigin = m === 'down' ? '50% 100%' : '50% 0'; // shrink toward the side the panel comes from
       shade.style.visibility = 'visible';
     };
     const release = () => {
@@ -310,14 +330,18 @@ export function NextProjectCard({ name, href }: { name: string; href: string }) 
       main.style.willChange = prevStyle.willChange;
       shade.style.opacity = '0';
       shade.style.visibility = 'hidden';
+      setHeader(1);
     };
 
-    // ----- down: the next card rises from below -----
+    // ----- down: the next project's page rises from below -----
     const read = () => {
       raf = 0;
+      if (opened) return;
       const vh = window.innerHeight;
       const r = section.getBoundingClientRect();
-      // p: 0 when the card's top is at the bottom of the screen, 1 when it reaches the top
+      // load the live view when the end is getting close
+      if (!v.next && r.top < vh * 3) v.next = makeView(href, `${name} (preview)`);
+      // p: 0 when the panel's top is at the bottom of the screen, 1 when it reaches the top
       const p = clamp01((vh - r.top) / vh);
       const e = smooth(0, 1, p);
       if (p > 0 && mode !== 'up') {
@@ -326,17 +350,24 @@ export function NextProjectCard({ name, href }: { name: string; href: string }) 
         const rad = (24 * Math.min(1, p * 4)).toFixed(1);
         main.style.borderRadius = `0 0 ${rad}px ${rad}px`;
         shade.style.opacity = (0.82 * e).toFixed(3);
+        setHeader(1 - smooth(0.75, 0.97, p));
       } else if (p <= 0 && mode === 'down') release();
+      // the panel: inset and rounded while it comes up, then fills the screen; the page inside rides with it
       const g = smooth(0.55, 1, p);
-      const inset = 16 * (1 - g);
-      card.style.left = `${inset.toFixed(1)}px`;
-      card.style.right = `${inset.toFixed(1)}px`;
-      card.style.top = `${(12 * (1 - g)).toFixed(1)}px`;
-      card.style.bottom = `${inset.toFixed(1)}px`;
-      card.style.borderRadius = `${(24 * (1 - g)).toFixed(1)}px`;
-      // pinned full-screen: after a little more scrolling the next case opens
-      const held = clamp01(-r.top / (vh * 0.3));
-      hint.style.opacity = String(smooth(0.6, 1, p) * (1 - held));
+      const side = 16 * (1 - g);
+      const top = 12 * (1 - g);
+      const rad = 24 * (1 - g);
+      panel.style.left = `${side.toFixed(1)}px`;
+      panel.style.right = `${side.toFixed(1)}px`;
+      panel.style.top = `${top.toFixed(1)}px`;
+      panel.style.bottom = `${side.toFixed(1)}px`;
+      panel.style.borderRadius = `${rad.toFixed(1)}px`;
+      if (v.next) {
+        const pr = panel.getBoundingClientRect();
+        fitView(v.next, pr, rad, -side, -top, p > 0 && pr.top < vh);
+      }
+      // full screen: a little more scrolling and the site is on the next project
+      const held = clamp01(-r.top / (vh * 0.25));
       if (held >= 1 && !opened && armed) {
         opened = true;
         go(href, 'next');
@@ -346,12 +377,14 @@ export function NextProjectCard({ name, href }: { name: string; href: string }) 
       if (!raf) raf = requestAnimationFrame(read);
     };
 
-    // ----- up: at the top, pulling further up brings the previous card down from the top -----
+    // ----- up: at the top, pulling further up brings the previous project's page down from above -----
     let pull = 0;
     let lastInput = 0;
     let touchY: number | null = null;
     let pullRaf = 0;
-    const drawPull = () => {
+    function drawPull() {
+      if (opened) return;
+      const vh = window.innerHeight;
       const e = smooth(0, 1, pull);
       if (pull > 0.001) {
         if (mode !== 'up') engage('up');
@@ -359,22 +392,28 @@ export function NextProjectCard({ name, href }: { name: string; href: string }) 
         const rad = (24 * Math.min(1, pull * 4)).toFixed(1);
         main.style.borderRadius = `${rad}px ${rad}px 0 0`;
         shade.style.opacity = (0.82 * e).toFixed(3);
-        pCard.style.visibility = 'visible';
+        setHeader(1 - smooth(0.1, 0.4, pull));
+        pPanel!.style.visibility = 'visible';
       } else {
         if (mode === 'up') release();
-        pCard.style.visibility = 'hidden';
+        pPanel!.style.visibility = 'hidden';
       }
-      // the card comes down from above the screen, then grows to fill it
+      // the panel comes down from above the screen, then fills it; the page inside rides with it
       const g = smooth(0.6, 1, pull);
-      const inset = 16 * (1 - g);
-      pCard.style.left = `${inset.toFixed(1)}px`;
-      pCard.style.right = `${inset.toFixed(1)}px`;
-      pCard.style.top = `${inset.toFixed(1)}px`;
-      pCard.style.bottom = `${(12 * (1 - g)).toFixed(1)}px`;
-      pCard.style.borderRadius = `${(24 * (1 - g)).toFixed(1)}px`;
-      pCard.style.transform = `translateY(calc(${((e - 1) * 100).toFixed(2)}% - ${((1 - e) * 24).toFixed(1)}px))`;
-      pHint.style.opacity = String(smooth(0.35, 0.8, pull));
-    };
+      const side = 16 * (1 - g);
+      const bottom = 12 * (1 - g);
+      const rad = 24 * (1 - g);
+      pPanel!.style.left = `${side.toFixed(1)}px`;
+      pPanel!.style.right = `${side.toFixed(1)}px`;
+      pPanel!.style.top = `${side.toFixed(1)}px`;
+      pPanel!.style.bottom = `${bottom.toFixed(1)}px`;
+      pPanel!.style.borderRadius = `${rad.toFixed(1)}px`;
+      pPanel!.style.transform = `translateY(calc(${((e - 1) * 100).toFixed(2)}% - ${((1 - e) * 24).toFixed(1)}px))`;
+      if (v.prev) {
+        const pr = pPanel!.getBoundingClientRect();
+        fitView(v.prev, pr, rad, -side, pr.height + bottom - vh, pull > 0.001);
+      }
+    }
     // let go early: spring back
     const settle = () => {
       pullRaf = 0;
@@ -385,8 +424,8 @@ export function NextProjectCard({ name, href }: { name: string; href: string }) 
       }
       if (pull > 0) pullRaf = requestAnimationFrame(settle);
     };
-    const setPull = (v: number) => {
-      pull = clamp01(v);
+    const setPull = (val: number) => {
+      pull = clamp01(val);
       lastInput = performance.now();
       drawPull();
       if (pull >= 1 && !opened) {
@@ -398,7 +437,7 @@ export function NextProjectCard({ name, href }: { name: string; href: string }) 
     };
     const atTop = () => window.scrollY <= 0;
     const onWheel = (ev: WheelEvent) => {
-      if (opened || !armed || switching) return;
+      if (opened || !armed) return;
       if (pull > 0) {
         ev.preventDefault(); // while pulling, the wheel drives the pull (both ways), not the page
         setPull(pull - ev.deltaY / PULL_WHEEL);
@@ -407,7 +446,7 @@ export function NextProjectCard({ name, href }: { name: string; href: string }) 
       }
     };
     const onTouchStart = (ev: TouchEvent) => {
-      touchY = atTop() && armed && !opened && !switching ? ev.touches[0].clientY : null;
+      touchY = atTop() && armed && !opened ? ev.touches[0].clientY : null;
     };
     const onTouchMove = (ev: TouchEvent) => {
       if (touchY === null || opened) return;
@@ -443,6 +482,12 @@ export function NextProjectCard({ name, href }: { name: string; href: string }) 
       if (raf) cancelAnimationFrame(raf);
       if (pullRaf) cancelAnimationFrame(pullRaf);
       window.clearTimeout(armT);
+      window.clearTimeout(prevT);
+      // views not handed to the next page go away with this page
+      if (v.next) v.next.clip.remove();
+      if (v.prev) v.prev.clip.remove();
+      v.next = null;
+      v.prev = null;
       root.style.backgroundColor = prevStyle.rootBg;
       main.style.backgroundColor = prevStyle.mainBg;
       main.style.transform = prevStyle.transform;
@@ -450,100 +495,151 @@ export function NextProjectCard({ name, href }: { name: string; href: string }) 
       main.style.borderRadius = prevStyle.radius;
       main.style.overflow = prevStyle.overflow;
       main.style.willChange = prevStyle.willChange;
+      if (header) header.style.opacity = '';
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reduce, href]);
+  }, [live, href]);
 
+  // reduced motion (or inside a live view): a plain card / a plain block of the same height
+  if (!live) {
+    if (EMBED) return <section id="next-project" data-tone="dark" style={{ height: '160vh', background: PAGE_GAP }} aria-hidden="true" />;
+    return (
+      <section id="next-project" className="bg-white px-5 pb-16 pt-5 md:px-10" style={{ fontFamily: HELV }}>
+        <a
+          href={href}
+          className="mx-auto flex min-h-[420px] max-w-[1440px] flex-col justify-between rounded-[20px] p-8 text-white md:p-12"
+          style={{ background: PANEL_BG }}
+        >
+          <p className="text-[16px] text-[#8e8e95]">Next project</p>
+          <div>
+            <p className="text-[48px] font-bold leading-none tracking-[-0.03em] md:text-[63px]">{name} →</p>
+            <p className="mt-4 text-[18px] text-[#a7a9b0]">{CARD_LINE[name] ?? ''}</p>
+          </div>
+        </a>
+      </section>
+    );
+  }
+
+  // the panels mark where the live views go (the views themselves live at body level) and take the clicks
   return (
-    <section
-      id="next-project"
-      ref={sectionRef}
-      data-tone="dark"
-      className="relative"
-      style={{ height: reduce ? 'auto' : '160vh', background: reduce ? '#ffffff' : PAGE_GAP, fontFamily: HELV }}
-    >
-      {/* darkens the page while a card comes in */}
+    <section id="next-project" ref={sectionRef} data-tone="dark" className="relative" style={{ height: '160vh', background: PAGE_GAP, fontFamily: HELV }}>
+      {/* darkens the page while a panel comes in */}
       <div ref={shadeRef} className="pointer-events-none fixed inset-0 z-[40]" style={{ background: '#000', opacity: 0, visibility: 'hidden' }} aria-hidden="true" />
 
-      {/* previous project: comes down from the top when you keep scrolling up at the top of the page */}
-      {!reduce && (
-        <a
-          ref={prevCardRef}
-          href={prev.route}
-          onClick={(e) => {
-            e.preventDefault();
-            go(prev.route, 'prev');
-          }}
-          aria-label={`Previous project: ${prev.name}`}
-          tabIndex={-1}
-          className="fixed z-[41] flex flex-col-reverse justify-between overflow-hidden text-white"
-          style={{ background: CARD_BG, left: 16, right: 16, top: 16, bottom: 12, borderRadius: 24, visibility: 'hidden', transform: 'translateY(-110%)' }}
-        >
-          <CardBody
-            name={prev.name}
-            icon={prev.icon}
-            label="Previous project"
-            hintRef={prevHintRef}
-            hint={
-              <>
-                Keep scrolling up to open <span aria-hidden>↑</span>
-              </>
-            }
-          />
-        </a>
-      )}
+      {/* previous project's page (its end): comes down from the top when you keep scrolling up at the top */}
+      <a
+        ref={prevPanelRef}
+        href={prev.route}
+        onClick={(e) => {
+          e.preventDefault();
+          go(prev.route, 'prev');
+        }}
+        aria-label={`Previous project: ${prev.name}`}
+        tabIndex={-1}
+        className="fixed z-[41] block overflow-hidden"
+        style={{ background: PANEL_BG, left: 16, right: 16, top: 16, bottom: 12, borderRadius: 24, visibility: 'hidden', transform: 'translateY(-110%)' }}
+      />
 
-      <div className={reduce ? 'px-5 pb-16 pt-5 md:px-10' : 'sticky top-0 z-[41] h-[100svh] overflow-hidden'}>
+      {/* next project's page (its top): rises from below and fills the screen */}
+      <div className="sticky top-0 z-[41] h-[100svh] overflow-hidden">
         <a
-          ref={cardRef}
+          ref={panelRef}
           href={href}
           onClick={(e) => {
             e.preventDefault();
             go(href, 'next');
           }}
           aria-label={`Next project: ${name}`}
-          className={`group flex flex-col justify-between overflow-hidden text-white ${reduce ? 'relative mx-auto min-h-[420px] max-w-[1440px] rounded-[20px]' : 'absolute'}`}
-          style={reduce ? { background: CARD_BG } : { background: CARD_BG, left: 16, right: 16, top: 12, bottom: 16, borderRadius: 24 }}
-        >
-          <CardBody
-            name={name}
-            icon={info?.icon}
-            label="Next project"
-            hintRef={hintRef}
-            hint={
-              <>
-                {reduce ? `Open ${name}` : 'Keep scrolling to open'} <span aria-hidden>{reduce ? '→' : '↓'}</span>
-              </>
-            }
-          />
-        </a>
+          className="absolute block overflow-hidden"
+          style={{ background: PANEL_BG, left: 16, right: 16, top: 12, bottom: 16, borderRadius: 24 }}
+        />
       </div>
     </section>
   );
 }
 
 /**
- * Wraps a case study. When it was opened from the previous-project pull, it starts at its end
- * (just above its own next-project card), so going back up feels like continuing upward.
- * (No fade here any more: the sliding card in coverAndGo uncovers the page.)
+ * Put as the LAST child inside CaseReveal: when a case was opened from a neighbour's live view, it sets the
+ * scroll to match what the view showed (the top when going forward; going back, the same distance above the
+ * page bottom as the view) before the first paint, and again after the case's own scroll-to-top effect.
+ * Then it keeps the handed-over view scrolling along with the page while the page settles, and dissolves it.
  */
-export function CaseEnterFade({ children }: { children: React.ReactNode }) {
+export function CaseSwapScroll() {
   const [from] = useState(() => enterFrom);
+  const [fromBottom] = useState(() => prevFromBottom);
+  const backY = () => {
+    if (fromBottom !== null) return Math.max(0, document.documentElement.scrollHeight - fromBottom);
+    return endOf(window);
+  };
+  const place = () => {
+    if (from === 'next') window.scrollTo(0, 0);
+    else if (from === 'prev') {
+      const y = backY();
+      if (y !== null) window.scrollTo(0, y);
+    }
+  };
+  useLayoutEffect(place, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
+    place();
     enterFrom = '';
-    if (from !== 'prev') return;
-    // the case's own effect has just scrolled to the top; move to its end instead (again once images settle)
-    let target = -1;
-    const toEnd = () => {
-      const s = document.getElementById('next-project');
-      if (!s) return;
-      if (target >= 0 && Math.abs(window.scrollY - target) > 4) return; // the visitor has already scrolled
-      target = Math.max(0, s.getBoundingClientRect().top + window.scrollY - window.innerHeight);
-      window.scrollTo(0, target);
+    prevFromBottom = null;
+    const timers: number[] = [];
+    const cleanups: (() => void)[] = [];
+
+    // the view stays on top, scrolling along with the page, then dissolves into it
+    const v = handoff;
+    handoff = null;
+    if (v) {
+      let fw: Window | null = null;
+      let base = 0;
+      try {
+        fw = v.frame.contentWindow;
+        base = fw ? fw.scrollY : 0;
+      } catch {
+        fw = null;
+      }
+      const real0 = window.scrollY;
+      const sync = () => {
+        try {
+          fw?.scrollTo(0, base + window.scrollY - real0);
+        } catch {
+          /* ignore */
+        }
+      };
+      window.addEventListener('scroll', sync, { passive: true });
+      timers.push(
+        window.setTimeout(() => {
+          v.clip.style.transition = `opacity ${DISSOLVE_MS}ms cubic-bezier(0.4, 0, 0.2, 1)`;
+          v.clip.style.opacity = '0';
+        }, HOLD_MS),
+        window.setTimeout(() => {
+          window.removeEventListener('scroll', sync);
+          v.clip.remove();
+        }, HOLD_MS + DISSOLVE_MS + 50)
+      );
+      cleanups.push(() => {
+        window.removeEventListener('scroll', sync);
+        v.clip.remove();
+      });
+    }
+
+    if (from === 'prev') {
+      // images above may still change the page height: keep the spot unless the visitor scrolls
+      let target = window.scrollY;
+      const keep = () => {
+        if (Math.abs(window.scrollY - target) > 4) return;
+        const y = backY();
+        if (y !== null) {
+          window.scrollTo(0, y);
+          target = y;
+        }
+      };
+      timers.push(window.setTimeout(keep, 150), window.setTimeout(keep, 500));
+    }
+    return () => {
+      timers.forEach((t) => window.clearTimeout(t));
+      cleanups.forEach((c) => c());
     };
-    toEnd();
-    const timers = [window.setTimeout(toEnd, 120), window.setTimeout(toEnd, 500)];
-    return () => timers.forEach((t) => window.clearTimeout(t));
-  }, [from]);
-  return <>{children}</>;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
 }

@@ -7,6 +7,7 @@ import {
   SLOTS_DESKTOP, SLOTS_MOBILE, LIFT, STAGGER, SHADOW_CSS, SHADOW_FLAT_CSS, placeMotion, shadowSize, flatShadowSize,
   slotDist, type DeskSlot,
 } from './deskScene';
+import { CUP_URL } from './cupImage';
 
 /**
  * Home hero, rebuilt from agentcard.com's main section (same scene and motion, Harbor's content and colours).
@@ -15,17 +16,19 @@ import {
  * The header (harbor, page links, Let's talk) is the fixed site header in HomeDock, drawn over this hero.
  *
  * INTRO (after Jitter's "Morph: Shape To Text", Harbor's reference clip), played on this same 3D headline so
- * the last frame of the intro is exactly the hero (same letters, font, size, place). About 2.4s:
- *  1. Light in, once: the navy/purple field and the flat pale headline fade up; a big "harbor" wordmark sits above.
- *  2. Snap: a single ring of light closes in on the headline, accelerating, and "clicks" at the centre.
- *  3. On the snap the field drops to black and the extrusion punches out long (pink at the letters, periwinkle at
- *     the back), the type tips back so it runs down toward a vanishing point; the wordmark flies to the header.
- *  4. Hand-off: depth, tilt and colours ease back to the hero's own values while the cobalt background fades in,
- *     the rest of the header fades in, the objects pop in and the mouse swing fades back.
+ * the last frame of the intro is exactly the hero (same letters, font, size, place). About 2.4s.
+ * Colours are the hero's own (cobalt field, white letters, cobalt extrusion) so the intro flows straight into
+ * the page instead of looking like a separate scene; no light flashes (no ring, no drop to black):
+ *  1. The cobalt field and the flat headline fade up once; a big "harbor" wordmark sits above.
+ *  2. The extrusion punches out long (lighter cobalt at the letters, deep navy at the back) and the type tips
+ *     back toward a vanishing point; the wordmark flies to the header.
+ *  3. Hand-off: depth and tilt ease back to the hero's own values, the rest of the header fades in, the objects
+ *     pop in and the mouse swing fades back.
  *     Click / key / wheel skips to the hand-off. prefers-reduced-motion: no intro.
  *
  * Objects: photoreal cut-outs of a UX designer's kit, generated on a green screen and keyed out in the browser,
- * saturated and then dimmed (blue multiply + navy fog) like agentcard's objects.
+ * saturated and then dimmed (blue multiply + navy fog) like agentcard's objects. The cup is Harbor's own
+ * hand-painted ceramic cup (her photo, cut out onto a green screen in ./cupImage.ts).
  *
  * Scroll — "the desk", laid out like Harbor's ClassPass reference (gift-card hero): same frame, same copy spot
  * and amount (a two-line headline + one rounded button, top-left), same desk shape. Tuning lives in ./deskScene.ts.
@@ -59,17 +62,15 @@ const SURROUND = { desktop: 31, mobile: 15 };
 const SHELL = { x: 13.5, y: 8.5, z: 12 };
 const DESK_CAM_V = new THREE.Vector3(DESK_CAM.x, DESK_CAM.y, DESK_CAM.z);
 
-// intro
-const INTRO_BG = 'radial-gradient(ellipse 70% 75% at 50% 50%, #05061A 0%, #0B1258 42%, #2A1B78 72%, #4A2390 88%, #1A0B33 100%)';
-const INTRO_FACE = '#F1EEFF';
-const EXT_NEAR = '#FF5FBF'; // pink at the letters
-const EXT_FAR = '#6F7CFF'; // periwinkle at the back
+// intro: in the hero's own colours
+const INTRO_BG = BG_FILL;
+const INTRO_FACE = '#F4F6FF';
+const EXT_NEAR = '#3653F0'; // lighter cobalt at the letters
+const EXT_FAR = '#0B1460'; // deep navy at the back
 const INTRO_DEEP = 9; // extrusion length at its longest, in multiples of the hero depth
 const INTRO_TILT = 0.3; // radians the type tips back while extruded
-const I_LIGHT = 0.35; // light comes in, once
-const I_RING_START = 0.25; // the single ring starts closing in
-const I_START_GROW = 0.75; // snap: the ring reaches the centre and the extrusion punches out
-const I_BLACK = 0.25;
+const I_LIGHT = 0.6; // the field and headline fade up, once
+const I_START_GROW = 0.75; // the extrusion punches out
 const I_GROW = 0.6;
 const I_HOLD = 0.25;
 const I_HAND = 0.8;
@@ -99,7 +100,7 @@ const ASSETS = {
   highlighter: { url: `${CDN}dfb749c7-c44e-4a4a-bd61-e5d27cd20dce.jpg`, size: 1.15 },
   cards: { url: `${CDN}052f754e-df24-4190-8afa-899d7fd8931e.jpg`, size: 1.45 },
   headphones: { url: `${CDN}af6d59a6-a5d1-4a5d-90d1-f83c6b22b233.jpg`, size: 1.5 },
-  mug: { url: `${CDN}5a5dcd76-f344-4d11-954d-e34a0b905d5d.jpg`, size: 1.2 },
+  mug: { url: CUP_URL, size: 1.35 }, // Harbor's hand-painted cup
   marker: { url: `${CDN}b6231f46-3b45-46e7-859b-c73ef7d98a87.jpg`, size: 1.3 },
   stickyPink: { url: `${CDN}f888f762-6978-4aad-aef7-4d563db4c4cf.jpg`, size: 1.25 },
   stickyBlue: { url: `${CDN}a82214a4-de69-43a0-a923-594eb040190e.jpg`, size: 1.25 },
@@ -216,9 +217,7 @@ export function ObjectsHero() {
   const tipRef = useRef<HTMLDivElement>(null);
   const copyRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const introBlackRef = useRef<HTMLDivElement>(null);
   const introBgRef = useRef<HTMLDivElement>(null);
-  const ringRef = useRef<HTMLDivElement>(null);
   const flyRef = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState(false);
 
@@ -233,11 +232,9 @@ export function ObjectsHero() {
     const hotEl = hotRef.current;
     const tip = tipRef.current;
     const copy = copyRef.current;
-    const iBlack = introBlackRef.current;
     const iBg = introBgRef.current;
-    const ringEl = ringRef.current;
     const fly = flyRef.current;
-    if (!canvas || !host || !outer || !bg || !wall || !deskEl || !shadowsEl || !hotEl || !tip || !copy || !iBlack || !iBg || !ringEl || !fly) return;
+    if (!canvas || !host || !outer || !bg || !wall || !deskEl || !shadowsEl || !hotEl || !tip || !copy || !iBg || !fly) return;
 
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
     const html = document.documentElement;
@@ -260,9 +257,7 @@ export function ObjectsHero() {
     const iv = { depth: 1, tilt: 0, flat: 0, scale: 1, obj: 1 };
     const prevOverflow = html.style.overflow;
     const hideIntroLayers = () => {
-      iBlack.style.display = 'none';
       iBg.style.display = 'none';
-      ringEl.style.display = 'none';
       fly.style.display = 'none';
     };
     const landLogo = () => {
@@ -287,8 +282,9 @@ export function ObjectsHero() {
       iv.depth = 0.02;
       iv.flat = 1;
       iv.obj = 0;
-      // start in the dark: the light comes in once when the headline is ready
+      // start dark (the section's own navy): the field and headline fade up once when the headline is ready
       iBg.style.opacity = '0';
+      bg.style.opacity = '0';
       canvas.style.opacity = '0';
       // the header stays in place; its wordmark waits for the flying one, the rest is hidden until the hand-off
       const { h, logo, rest } = headerParts();
@@ -303,6 +299,7 @@ export function ObjectsHero() {
     } catch {
       setFailed(true);
       hideIntroLayers();
+      bg.style.opacity = '';
       canvas.style.opacity = '';
       html.style.overflow = prevOverflow;
       showHeader();
@@ -524,26 +521,20 @@ export function ObjectsHero() {
       if (p >= 1) landLogo();
     }
 
-    /** intro timeline -> iv (depth, tilt, face colour, objects), side colours and the background layers */
+    /** intro timeline -> iv (depth, tilt, face colour, objects), side colours and the background */
     function introStep(now: number) {
       if (!introOn || !introStart) return;
       const t = (now - introStart) / 1000;
-      // 1. light comes in, once
-      const light = outCubic(clamp01(t / I_LIGHT));
-      // 2. one ring closes in on the headline, accelerating, and clicks at the centre
-      const rp = clamp01((t - I_RING_START) / (I_START_GROW - I_RING_START));
-      ringEl.style.transform = `translate(-50%, -50%) scale(${lerp(2.6, 0.18, rp * rp * rp).toFixed(3)})`;
-      ringEl.style.opacity = rp <= 0 || rp >= 1 ? '0' : String((0.95 * Math.min(1, rp * 4)).toFixed(3));
-      // 3. on the snap: black field, the extrusion punches out
-      const black = outCubic(clamp01((t - I_START_GROW) / I_BLACK));
+      // 1. the cobalt field and the headline fade up, once (gently, no flash)
+      const light = inOut(clamp01(t / I_LIGHT));
+      // 2. the extrusion punches out
       const growLin = clamp01((t - I_START_GROW) / I_GROW);
       const grow = outCubic(growLin);
-      // 4. hand-off to the hero
+      // 3. hand-off to the hero
       const hand = inOut(clamp01((t - I_START_HAND) / I_HAND));
 
       canvas!.style.opacity = String(light);
-      iBg.style.opacity = String(light * (1 - black));
-      iBlack.style.opacity = String(1 - hand);
+      iBg.style.opacity = String(light);
 
       iv.depth = lerp(lerp(0.02, INTRO_DEEP, grow), 1, hand);
       iv.tilt = INTRO_TILT * grow * (1 - hand);
@@ -568,6 +559,7 @@ export function ObjectsHero() {
       sideU.uNear.value.copy(cSide);
       sideU.uFar.value.copy(cSide);
       canvas!.style.opacity = '';
+      bg!.style.opacity = '';
       hideIntroLayers();
       html.style.overflow = prevOverflow;
       showHeader();
@@ -1093,6 +1085,7 @@ export function ObjectsHero() {
       reduce.removeEventListener?.('change', sync);
       html.style.overflow = prevOverflow;
       canvas.style.opacity = '';
+      bg.style.opacity = '';
       showHeader();
       shadowsEl.innerHTML = '';
       hotEl.innerHTML = '';
@@ -1147,20 +1140,8 @@ export function ObjectsHero() {
           <div ref={shadowsRef} className="absolute inset-0" />
         </div>
 
-        {/* intro field: black under a navy/purple glow, and one ring of light that closes in on the headline */}
-        <div ref={introBlackRef} className="pointer-events-none absolute inset-0 bg-black" aria-hidden="true" />
+        {/* intro field: the hero's own cobalt, fading up once */}
         <div ref={introBgRef} className="pointer-events-none absolute inset-0" style={{ backgroundImage: INTRO_BG }} aria-hidden="true" />
-        <div
-          ref={ringRef}
-          aria-hidden="true"
-          className="pointer-events-none absolute left-1/2 top-1/2 rounded-full"
-          style={{
-            width: '70vmax',
-            height: '70vmax',
-            opacity: 0,
-            background: 'radial-gradient(circle, transparent 52%, rgba(150,110,255,0.55) 62%, rgba(255,95,191,0.25) 68%, transparent 74%)',
-          }}
-        />
 
         <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full" style={{ cursor: 'grab', touchAction: 'pan-y' }} aria-hidden="true" />
 
