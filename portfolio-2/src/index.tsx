@@ -4,25 +4,33 @@ import ReactDOM from "react-dom/client";
 import { App } from "./App";
 import { TrustBank } from "./TrustBank";
 import { GameCove } from "./GameCove";
-import { ProjectsPage, AboutPage } from "./Pages";
+import { AboutPage } from "./Pages";
 import { useScreenInit } from "./useScreenInit.js";
 
-// Hash routes: "#/projects" and "#/about" are landing pages, "#/trust-bank" and "#/gamecove" open the case studies;
-// any other hash (#projects, #skills…) is a section of the main page.
+// Hash routes: "#/about" is the About page, "#/trust-bank" and "#/gamecove" open the case studies;
+// any other hash (#projects, #contact…) is a section of the main page.
+// The separate Projects page was removed (the header's Projects dropdown replaces it): an old "#/projects" link
+// lands on the Selected work section of the main page.
+const fixOld = () => {
+  if (window.location.hash === "#/projects") {
+    history.replaceState(null, "", "#projects");
+  }
+  return window.location.hash;
+};
+
 function Root() {
   const screen = useScreenInit() as { page?: string } | undefined;
-  const [hash, setHash] = useState(window.location.hash);
+  const [hash, setHash] = useState(fixOld);
   useEffect(() => {
-    const on = () => setHash(window.location.hash);
+    const on = () => setHash(fixOld());
     window.addEventListener("hashchange", on);
     return () => window.removeEventListener("hashchange", on);
   }, []);
   const is = (route: string, page: string) => hash.startsWith(route) || (!hash.startsWith("#/") && screen?.page === page);
   const isTB = is("#/trust-bank", "trust-bank");
   const isGC = is("#/gamecove", "gamecove");
-  const isPJ = is("#/projects", "projects");
   const isAB = is("#/about", "about");
-  const page = isTB ? "tb" : isGC ? "gc" : isPJ ? "pj" : isAB ? "ab" : "main";
+  const page = isTB ? "tb" : isGC ? "gc" : isAB ? "ab" : "main";
 
   useEffect(() => {
     if (page !== "main") {
@@ -48,7 +56,6 @@ function Root() {
 
   if (page === "tb") return <TrustBank key="tb" />;
   if (page === "gc") return <GameCove key="gc" />;
-  if (page === "pj") return <ProjectsPage key="pj" />;
   if (page === "ab") return <AboutPage key="ab" />;
   return <App key="main" />;
 }

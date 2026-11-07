@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { CSS, IMG, IMG3 } from './portfolio'
-import { PAGE_CSS, LINKS, TB, SiteHeader, SiteFooter, ClosingCTA, VoiceAssistant, useReveal } from './App'
+import { CSS, IMG } from './portfolio'
+import { PAGE_CSS, LINKS, SiteHeader, SiteFooter, ClosingCTA, VoiceAssistant, useReveal } from './App'
 
-// Projects and About me landing pages, modelled on rox.com/customers and rox.com/company:
-// light header with the current page underlined, two-tone hero, featured media, a filterable card grid,
-// photo carousel, mid-page CTA band, the shared dark closing CTA and footer.
+// About me landing page, modelled on rox.com/company: light header, two-tone hero, photo carousel, filterable work grid,
+// mid-page CTA band, background cards, the shared dark closing CTA and footer.
+// (The Projects page that used to live here was removed at Harbor's request; the header's Projects dropdown replaces it.)
 
 const SUB_CSS = `
 .sub-page { background: #fff; }
@@ -21,41 +21,12 @@ const SUB_CSS = `
 .btn-line { border: 1px solid var(--ink); color: var(--ink); }
 .btn-line:hover { background: var(--ink); color: #fff; }
 
-/* featured media (rox customers video) */
-.featured { display: block; position: relative; background: var(--off); padding: 48px; border: 1px solid var(--line); }
-.featured .frame { position: relative; aspect-ratio: 2 / 1; overflow: hidden; background: #E9E9E6; }
-.featured img, .featured video { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 1.4s var(--ease); }
-.featured:hover img, .featured:hover video { transform: scale(1.025); }
-.featured .cap { position: absolute; left: 24px; bottom: 24px; right: 24px; display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
-.featured .cap-box { background: #fff; padding: 16px 20px; }
-.featured .cap-k { font-size: 16px; color: var(--mute); }
-.featured .cap-t { margin-top: 4px; font-size: 22px; font-weight: 500; }
-.featured .cap-go { background: var(--ink); color: #fff; padding: 14px 20px; font-size: 16px; font-weight: 500; }
-
 /* filter tabs */
 .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 40px; }
 .filters button { padding: 10px 18px; border: 1px solid var(--line); background: #fff; font-size: 16px; color: var(--mute); cursor: pointer; transition: background .25s, color .25s, border-color .25s; }
 .filters button:hover { color: var(--ink); border-color: var(--ink); }
 .filters button[aria-pressed="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
 .filters .count { margin-left: 6px; opacity: .6; }
-
-/* project cards */
-.pgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
-.pcard { display: flex; flex-direction: column; border: 1px solid var(--line); background: #fff; transition: border-color .3s, transform .5s var(--ease), box-shadow .5s; }
-a.pcard:hover { border-color: var(--ink); transform: translateY(-4px); box-shadow: 0 18px 40px rgba(0,0,0,.08); }
-.pcard .thumb { aspect-ratio: 16 / 10; overflow: hidden; background: var(--off); border-bottom: 1px solid var(--line); }
-.pcard .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 1.2s var(--ease); }
-a.pcard:hover .thumb img { transform: scale(1.04); }
-.pcard .tile { width: 100%; height: 100%; display: flex; align-items: flex-end; padding: 24px; font-size: 40px; font-weight: 300; letter-spacing: -0.02em; color: #8C8C8A;
-  background-image: radial-gradient(circle, rgba(0,0,0,.14) 1px, transparent 1.4px); background-size: 16px 16px; }
-.pcard .body { flex: 1; display: flex; flex-direction: column; padding: 24px; }
-.pcard .co { font-size: 16px; color: var(--mute); }
-.pcard .head { margin-top: 10px; font-size: 32px; font-weight: 400; letter-spacing: -0.02em; line-height: 1.15; }
-.pcard .desc { margin-top: 8px; font-size: 16px; line-height: 1.5; color: #333; }
-.pcard .foot-row { margin-top: auto; padding-top: 24px; display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 16px; }
-.pcard .meta { color: var(--mute); }
-.pcard .soon { color: #8C8C8A; }
-.pcard.hide { display: none; }
 
 /* photo strip — slow auto-scroll (rox company carousel) */
 .photos-head { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 24px; }
@@ -98,109 +69,15 @@ a.pcard:hover .thumb img { transform: scale(1.04); }
 .tools { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 40px; }
 
 @media (max-width: 1280px) {
-  .pgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .wgrid, .bgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 900px) {
   .sub-hero { padding: 140px 0 64px; }
-  .pgrid, .wgrid, .bgrid { grid-template-columns: minmax(0, 1fr); }
-  .featured { padding: 16px; }
-  .featured .frame { aspect-ratio: 4 / 3; }
-  .featured .cap { flex-direction: column; align-items: flex-start; }
+  .wgrid, .bgrid { grid-template-columns: minmax(0, 1fr); }
   .band-in { flex-direction: column; align-items: flex-start; }
   .band h2 { font-size: 32px; }
 }
 `
-
-/* ------------------------------------------------------------------ Projects */
-
-type Card = { co: string; head: string; desc: string; meta: string; tags: string[]; href?: string; img?: string; tile?: string; alt?: string }
-const CARDS: Card[] = [
-  { co: 'Trust Bank Singapore', head: '85 SUS score', desc: 'Turning hidden rewards into everyday loyalty for a digital bank.', meta: 'UX research & redesign · 8 weeks', tags: ['Case study', 'Fintech'], href: '#/trust-bank', img: IMG3 + 'trust-bank-thumb.webp', alt: 'Trust Bank rewards screen' },
-  { co: 'GameCove', head: 'AI game analytics', desc: 'A game-analytics dashboard, designed as a team project.', meta: 'Case study · Data dashboard', tags: ['Case study', 'Data'], href: '#/gamecove', img: IMG + 'gamecove.webp', alt: 'GameCove overview dashboard' },
-  { co: 'UTrada', head: 'Trading platform', desc: 'Product design for a trading platform.', meta: '2024 – 2026', tags: ['Fintech'], img: IMG3 + 'utrada-screens.webp', alt: 'UTrada website screens' },
-  { co: 'ETO Markets', head: 'Trading, Sydney', desc: 'Product design for a trading / fintech company in Sydney.', meta: 'Nov 2022 – Sep 2023', tags: ['Fintech'], img: IMG + 'eto-markets.webp', alt: 'ETO Markets app screen' },
-  { co: 'WalletPro', head: 'Design system', desc: 'A fintech / SaaS design system built from scratch in Figma.', meta: 'Design system', tags: ['Design system', 'Fintech'], tile: 'WalletPro' },
-  { co: 'Localization', head: '11 languages', desc: 'Multilingual product design in up to 11 languages.', meta: 'Multilingual', tags: ['Design system'], tile: 'Aa 가 あ' },
-]
-const FILTERS = ['All', 'Case study', 'Fintech', 'Data', 'Design system']
-
-export function ProjectsPage() {
-  const [f, setF] = useState('All')
-  useReveal()
-  const count = (k: string) => (k === 'All' ? CARDS.length : CARDS.filter(c => c.tags.includes(k)).length)
-  return (
-    <div className="hb sub-page" id="top">
-      <style>{CSS + PAGE_CSS + SUB_CSS}</style>
-      <SiteHeader current="projects" solid />
-      <main>
-        <section className="sub-hero">
-          <div className="wrap" data-reveal>
-            <div className="eyebrow">(Projects)</div>
-            <h1 className="sub-h1"><span>Projects, end to end</span><span className="mute">from research to shipped UI.</span></h1>
-            <p className="sub-lead">Case studies and product work across digital banking, trading platforms, data dashboards and design systems.</p>
-          </div>
-        </section>
-
-        <section className="wrap" aria-label="Featured case study">
-          <a className="featured" href="#/trust-bank" data-reveal>
-            <div className="frame">
-              <video src={TB + 'hero-sfx-v2.mp4'} poster={TB + 'hero-sfx-v2-poster.jpg'} autoPlay muted loop playsInline preload="metadata" />
-              <div className="cap">
-                <div className="cap-box"><div className="cap-k">Featured case study</div><div className="cap-t">Trust Bank Singapore</div></div>
-                <span className="cap-go">Read case study →</span>
-              </div>
-            </div>
-          </a>
-        </section>
-
-        <section className="sec" aria-label="All projects">
-          <div className="wrap">
-            <div className="sec-head" data-reveal>
-              <div>
-                <div className="eyebrow">(01) All projects</div>
-                <h2 className="h2">Selected work</h2>
-              </div>
-            </div>
-            <div className="filters" role="group" aria-label="Filter projects" data-reveal>
-              {FILTERS.map(k => (
-                <button key={k} aria-pressed={f === k} onClick={() => setF(k)}>{k}<span className="count">{count(k)}</span></button>
-              ))}
-            </div>
-            <div className="pgrid">
-              {CARDS.map((c, i) => {
-                const hidden = f !== 'All' && !c.tags.includes(f)
-                const inner = (
-                  <>
-                    <div className="thumb">{c.img ? <img src={c.img} alt={c.alt ?? ''} loading="lazy" /> : <div className="tile">{c.tile}</div>}</div>
-                    <div className="body">
-                      <div className="co">{c.co}</div>
-                      <div className="head">{c.head}</div>
-                      <div className="desc">{c.desc}</div>
-                      <div className="foot-row">
-                        <span className="meta">{c.meta}</span>
-                        {c.href ? <span>Read <span className="go">→</span></span> : <span className="soon">Coming soon</span>}
-                      </div>
-                    </div>
-                  </>
-                )
-                const cls = 'pcard' + (hidden ? ' hide' : '')
-                const style = { '--d': i % 3 } as React.CSSProperties
-                return c.href
-                  ? <a className={cls} href={c.href} key={c.co} data-reveal style={style}>{inner}</a>
-                  : <article className={cls} key={c.co} data-reveal style={style}>{inner}</article>
-              })}
-            </div>
-          </div>
-        </section>
-
-        <ClosingCTA />
-      </main>
-      <SiteFooter />
-      <VoiceAssistant />
-    </div>
-  )
-}
 
 /* ------------------------------------------------------------------ About me */
 
@@ -343,7 +220,7 @@ export function AboutPage() {
             <h2>Ready to work together?<span className="mute">I’m open to product design roles.</span></h2>
             <div className="sub-ctas" style={{ marginTop: 0 }}>
               <a className="btn btn-ink" href={LINKS.cal} target="_blank" rel="noreferrer">Book a call</a>
-              <a className="btn btn-line" href="#/projects">See projects</a>
+              <a className="btn btn-line" href="#projects">See projects</a>
             </div>
           </div>
         </section>

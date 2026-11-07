@@ -2,10 +2,10 @@ import React, { useEffect, useRef, useState } from 'react'
 import { CSS } from './portfolio'
 import { GameCoveV4Body, GC4_CHAPTERS } from './GameCoveV4'
 
-// GameCove case study page for this site. The body (hero → reflection) is GameCoveV4.tsx, built from Figma
-// "GameCove_v.4 · GameCove colors" in GameCove's own dark palette, with the Trust Bank page's scroll interactions.
-// This file keeps the site chrome the Trust Bank page uses: header that tucks away on scroll down with the
-// chapter name and reading bar (dark here, to sit on the dark page), cursor dot trail, next case card and footer.
+// GameCove case study page for this site. The body (hero → reflection) is GameCoveV4.tsx (the same file Portfolio_1 uses),
+// built from Figma "GameCove_v.4 · GameCove colors" in GameCove's own dark palette.
+// This file keeps the site chrome the Trust Bank page uses: header fixed at the top at all times with the chapter name
+// and reading bar (dark here, to sit on the dark page), cursor dot trail, next case card and footer.
 
 const NEXT_URL = '#/trust-bank'
 const LINKS = {
@@ -108,21 +108,15 @@ function CursorTrail() {
 export function GameCove() {
   const [chapter, setChapter] = useState('GameCove')
   const [scrolled, setScrolled] = useState(false)
-  const [hidden, setHidden] = useState(false)
   const bar = useRef<HTMLDivElement>(null)
-  const lastY = useRef(0)
 
   useEffect(() => { scrollTo(0, 0) }, [])
 
-  // reading progress, header background after the hero, and tuck the header away while scrolling down
+  // reading progress, and the dark glass background once the page has scrolled (the header itself never hides)
   useOnScroll(() => {
     const y = scrollY, max = document.documentElement.scrollHeight - innerHeight
     if (bar.current) bar.current.style.transform = `scaleX(${max > 0 ? y / max : 0})`
     setScrolled(y > 40)
-    if (y < 80) setHidden(false)
-    else if (y > lastY.current + 4) setHidden(true)
-    else if (y < lastY.current - 4) setHidden(false)
-    lastY.current = y
   })
 
   // current chapter name in the header
@@ -141,7 +135,7 @@ export function GameCove() {
       <style>{CSS + GC_CSS}</style>
       <CursorTrail />
 
-      <header className={'gc-head' + (scrolled ? ' scrolled' : '') + (hidden ? ' hidden' : '')} onFocusCapture={() => setHidden(false)}>
+      <header className={'gc-head' + (scrolled ? ' scrolled' : '')}>
         <div className="wrap gc-nav">
           <div className="nav-left">
             <a className="logo" href="#top" onClick={e => { e.preventDefault(); scrollTo({ top: 0, behavior: 'smooth' }) }}>harbor</a>
@@ -172,7 +166,7 @@ export function GameCove() {
           <div className="foot-top">
             <div className="brand"><div className="logo">harbor</div><a href={LINKS.email}>harborkim0328@gmail.com</a></div>
             <div className="foot-cols">
-              <div className="foot-col"><div className="h">Explore</div><a href="#projects">Projects</a><a href="#skills">About me</a></div>
+              <div className="foot-col"><div className="h">Explore</div><a href="#projects">Projects</a><a href="#/about">About me</a></div>
               <div className="foot-col"><div className="h">Contact</div><a href={LINKS.email}>Email</a><a href={LINKS.linkedin} target="_blank" rel="noreferrer">LinkedIn</a><a href={LINKS.instagram} target="_blank" rel="noreferrer">Instagram</a><a href={LINKS.cal} target="_blank" rel="noreferrer">Book a call</a></div>
             </div>
           </div>
@@ -188,11 +182,10 @@ const GC_CSS = `
 .gc { background: #111114; }
 .gc .cursor-trail { position: fixed; inset: 0; z-index: 2147483000; pointer-events: none; mix-blend-mode: difference; }
 
-/* header: transparent over the hero, dark glass after scrolling, tucks away while scrolling down */
+/* header: fixed at the top at all times; transparent over the hero, dark glass after scrolling */
 .gc-head { position: fixed; inset: 0 0 auto 0; z-index: 50; color: #F2F0EC; border-bottom: 1px solid transparent;
-  transition: background-color .35s, color .35s, border-color .35s, transform .35s cubic-bezier(.22,1,.36,1); }
+  transition: background-color .35s, color .35s, border-color .35s; }
 .gc-head.scrolled { background: rgba(17,17,20,.86); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border-bottom-color: #2A2D31; }
-.gc-head.hidden { transform: translateY(calc(-100% - 4px)); }
 .gc-nav { height: 72px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; }
 .gc-nav .nav-left { gap: 32px; }
 .gc-nav .nav-right { justify-content: flex-end; }
@@ -203,6 +196,9 @@ const GC_CSS = `
 .gc .gc-head .btn-sm { background: #F2F0EC; color: #111114; }
 .gc .read { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; }
 .gc .read i { display: block; height: 100%; background: #B3D1FF; transform: scaleX(0); transform-origin: 0 50%; }
+
+/* the pinned Final design showcase sits below the fixed header */
+.gc .gc4 .g-show { padding-top: 96px; }
 
 /* next project */
 .gc .next { background: #17171B; color: #F2F0EC; border-top: 1px solid #2A2D31; }
